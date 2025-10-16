@@ -202,7 +202,7 @@ if st.button("🔍 Analyze Similarity", type="primary", use_container_width=True
                 if text1 == text2:
                     st.success("✅ The texts are identical!")
                 else:
-                    # Word-level comparison
+                    # Word-level comparison for statistics
                     words1 = text1.split()
                     words2 = text2.split()
                     
@@ -215,83 +215,181 @@ if st.button("🔍 Analyze Similarity", type="primary", use_container_width=True
                     common_words = set1 & set2
                     
                     # Display statistics
-                    st.markdown("### Summary Statistics")
+                    st.markdown("### 📊 Summary Statistics")
                     stat_col1, stat_col2, stat_col3 = st.columns(3)
                     
                     with stat_col1:
-                        st.metric("Common Words", len(common_words))
+                        st.metric("✅ Common Words", len(common_words))
                     with stat_col2:
-                        st.metric("Only in Text 1", len(only_in_text1))
+                        st.metric("➖ Only in Text 1", len(only_in_text1))
                     with stat_col3:
-                        st.metric("Only in Text 2", len(only_in_text2))
+                        st.metric("➕ Only in Text 2", len(only_in_text2))
                     
-                    # Visual word comparison using SequenceMatcher
-                    st.markdown("### Highlighted Comparison")
-                    st.info("🔴 **Red background** = Removed/Changed | 🟢 **Green background** = Added/New | ⚪ No highlight = Unchanged")
+                    st.markdown("---")
                     
-                    # Use SequenceMatcher for detailed comparison
-                    matcher = difflib.SequenceMatcher(None, text1, text2)
-                    opcodes = matcher.get_opcodes()
+                    # Comparison mode selector
+                    st.markdown("### 🎨 Visual Comparison")
+                    comparison_mode = st.radio(
+                        "Choose comparison mode:",
+                        ["Line-by-Line", "Word-by-Word", "Character-Level"],
+                        horizontal=True,
+                        help="Different modes show different levels of detail"
+                    )
                     
-                    # Create HTML for Text 1 (showing deletions/changes)
-                    html_text1 = "<div style='padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-family: monospace; line-height: 1.8; white-space: pre-wrap;'>"
-                    for tag, i1, i2, j1, j2 in opcodes:
-                        if tag == 'equal':
-                            html_text1 += text1[i1:i2]
-                        elif tag == 'delete':
-                            html_text1 += f"<span style='background-color: #ffcccb; padding: 2px 4px; border-radius: 3px;'>{text1[i1:i2]}</span>"
-                        elif tag == 'replace':
-                            html_text1 += f"<span style='background-color: #ffcccb; padding: 2px 4px; border-radius: 3px;'>{text1[i1:i2]}</span>"
-                    html_text1 += "</div>"
+                    # Helper function to escape HTML
+                    def escape_html(text):
+                        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                     
-                    # Create HTML for Text 2 (showing additions/changes)
-                    html_text2 = "<div style='padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-family: monospace; line-height: 1.8; white-space: pre-wrap;'>"
-                    for tag, i1, i2, j1, j2 in opcodes:
-                        if tag == 'equal':
-                            html_text2 += text2[j1:j2]
-                        elif tag == 'insert':
-                            html_text2 += f"<span style='background-color: #90EE90; padding: 2px 4px; border-radius: 3px;'>{text2[j1:j2]}</span>"
-                        elif tag == 'replace':
-                            html_text2 += f"<span style='background-color: #90EE90; padding: 2px 4px; border-radius: 3px;'>{text2[j1:j2]}</span>"
-                    html_text2 += "</div>"
+                    if comparison_mode == "Line-by-Line":
+                        # Line-by-line comparison (cleanest)
+                        lines1 = text1.splitlines()
+                        lines2 = text2.splitlines()
+                        
+                        matcher = difflib.SequenceMatcher(None, lines1, lines2)
+                        opcodes = matcher.get_opcodes()
+                        
+                        st.info("📝 **Line-by-Line Comparison** - Shows which lines were added, removed, or changed")
+                        
+                        diff_col1, diff_col2 = st.columns(2)
+                        
+                        with diff_col1:
+                            st.markdown("**📄 Text 1**")
+                            html1 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    for line in lines1[i1:i2]:
+                                        html1 += f"<div style='padding: 4px 8px; margin: 2px 0; line-height: 1.6;'>{escape_html(line) if line else '&nbsp;'}</div>"
+                                elif tag == 'delete':
+                                    for line in lines1[i1:i2]:
+                                        html1 += f"<div style='padding: 4px 8px; margin: 2px 0; background-color: #ffe6e6; border-left: 4px solid #ff4444; line-height: 1.6;'>➖ {escape_html(line) if line else '&nbsp;'}</div>"
+                                elif tag == 'replace':
+                                    for line in lines1[i1:i2]:
+                                        html1 += f"<div style='padding: 4px 8px; margin: 2px 0; background-color: #fff3cd; border-left: 4px solid #ff9800; line-height: 1.6;'>🔄 {escape_html(line) if line else '&nbsp;'}</div>"
+                            html1 += "</div>"
+                            st.markdown(html1, unsafe_allow_html=True)
+                        
+                        with diff_col2:
+                            st.markdown("**📄 Text 2**")
+                            html2 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    for line in lines2[j1:j2]:
+                                        html2 += f"<div style='padding: 4px 8px; margin: 2px 0; line-height: 1.6;'>{escape_html(line) if line else '&nbsp;'}</div>"
+                                elif tag == 'insert':
+                                    for line in lines2[j1:j2]:
+                                        html2 += f"<div style='padding: 4px 8px; margin: 2px 0; background-color: #e6ffe6; border-left: 4px solid #44ff44; line-height: 1.6;'>➕ {escape_html(line) if line else '&nbsp;'}</div>"
+                                elif tag == 'replace':
+                                    for line in lines2[j1:j2]:
+                                        html2 += f"<div style='padding: 4px 8px; margin: 2px 0; background-color: #fff3cd; border-left: 4px solid #ff9800; line-height: 1.6;'>🔄 {escape_html(line) if line else '&nbsp;'}</div>"
+                            html2 += "</div>"
+                            st.markdown(html2, unsafe_allow_html=True)
+                        
+                        st.caption("✅ No highlight = Unchanged | 🔴 Red = Removed | 🟢 Green = Added | 🟡 Yellow = Modified")
                     
-                    # Display side by side
-                    diff_col1, diff_col2 = st.columns(2)
+                    elif comparison_mode == "Word-by-Word":
+                        # Word-by-word comparison
+                        st.info("📝 **Word-by-Word Comparison** - Highlights individual word differences")
+                        
+                        words1_list = text1.split()
+                        words2_list = text2.split()
+                        
+                        matcher = difflib.SequenceMatcher(None, words1_list, words2_list)
+                        opcodes = matcher.get_opcodes()
+                        
+                        diff_col1, diff_col2 = st.columns(2)
+                        
+                        with diff_col1:
+                            st.markdown("**📄 Text 1**")
+                            html1 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto; line-height: 2.2;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    html1 += ' '.join([escape_html(w) for w in words1_list[i1:i2]]) + ' '
+                                elif tag == 'delete':
+                                    for word in words1_list[i1:i2]:
+                                        html1 += f"<span style='background-color: #ffcccc; padding: 2px 6px; margin: 0 2px; border-radius: 4px; text-decoration: line-through;'>{escape_html(word)}</span> "
+                                elif tag == 'replace':
+                                    for word in words1_list[i1:i2]:
+                                        html1 += f"<span style='background-color: #ffe4b3; padding: 2px 6px; margin: 0 2px; border-radius: 4px;'>{escape_html(word)}</span> "
+                            html1 += "</div>"
+                            st.markdown(html1, unsafe_allow_html=True)
+                        
+                        with diff_col2:
+                            st.markdown("**📄 Text 2**")
+                            html2 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto; line-height: 2.2;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    html2 += ' '.join([escape_html(w) for w in words2_list[j1:j2]]) + ' '
+                                elif tag == 'insert':
+                                    for word in words2_list[j1:j2]:
+                                        html2 += f"<span style='background-color: #ccffcc; padding: 2px 6px; margin: 0 2px; border-radius: 4px; font-weight: 500;'>{escape_html(word)}</span> "
+                                elif tag == 'replace':
+                                    for word in words2_list[j1:j2]:
+                                        html2 += f"<span style='background-color: #ffe4b3; padding: 2px 6px; margin: 0 2px; border-radius: 4px;'>{escape_html(word)}</span> "
+                            html2 += "</div>"
+                            st.markdown(html2, unsafe_allow_html=True)
+                        
+                        st.caption("✅ No highlight = Unchanged | 🔴 Red strikethrough = Removed | 🟢 Green = Added | 🟡 Orange = Modified")
                     
-                    with diff_col1:
-                        st.markdown("**Text 1** (with deletions highlighted)")
-                        st.markdown(html_text1, unsafe_allow_html=True)
-                    
-                    with diff_col2:
-                        st.markdown("**Text 2** (with additions highlighted)")
-                        st.markdown(html_text2, unsafe_allow_html=True)
+                    else:  # Character-Level
+                        # Character-level comparison (most detailed)
+                        st.info("📝 **Character-Level Comparison** - Shows exact character differences (most detailed)")
+                        st.warning("⚠️ This view may show many highlights for texts with structural differences")
+                        
+                        matcher = difflib.SequenceMatcher(None, text1, text2)
+                        opcodes = matcher.get_opcodes()
+                        
+                        diff_col1, diff_col2 = st.columns(2)
+                        
+                        with diff_col1:
+                            st.markdown("**📄 Text 1**")
+                            html1 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto; white-space: pre-wrap; line-height: 1.8;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    html1 += escape_html(text1[i1:i2])
+                                elif tag in ('delete', 'replace'):
+                                    html1 += f"<span style='background-color: #ffcccc; padding: 1px 2px;'>{escape_html(text1[i1:i2])}</span>"
+                            html1 += "</div>"
+                            st.markdown(html1, unsafe_allow_html=True)
+                        
+                        with diff_col2:
+                            st.markdown("**📄 Text 2**")
+                            html2 = "<div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; max-height: 500px; overflow-y: auto; white-space: pre-wrap; line-height: 1.8;'>"
+                            for tag, i1, i2, j1, j2 in opcodes:
+                                if tag == 'equal':
+                                    html2 += escape_html(text2[j1:j2])
+                                elif tag in ('insert', 'replace'):
+                                    html2 += f"<span style='background-color: #ccffcc; padding: 1px 2px;'>{escape_html(text2[j1:j2])}</span>"
+                            html2 += "</div>"
+                            st.markdown(html2, unsafe_allow_html=True)
+                        
+                        st.caption("✅ No highlight = Unchanged | 🔴 Red = Removed | 🟢 Green = Added")
                     
                     # Show unique words if there are any
                     if only_in_text1 or only_in_text2:
                         st.markdown("---")
-                        st.markdown("### Unique Words Analysis")
+                        st.markdown("### 🔤 Unique Words Analysis")
                         
                         unique_col1, unique_col2 = st.columns(2)
                         
                         with unique_col1:
                             st.markdown("**Words only in Text 1:**")
                             if only_in_text1:
-                                # Sort and display
                                 sorted_words1 = sorted(list(only_in_text1))
-                                st.markdown(", ".join([f"`{word}`" for word in sorted_words1[:50]]))
-                                if len(only_in_text1) > 50:
-                                    st.caption(f"... and {len(only_in_text1) - 50} more")
+                                words_display = " · ".join([f"**{word}**" for word in sorted_words1[:30]])
+                                st.markdown(words_display)
+                                if len(only_in_text1) > 30:
+                                    st.caption(f"... and {len(only_in_text1) - 30} more words")
                             else:
                                 st.caption("None")
                         
                         with unique_col2:
                             st.markdown("**Words only in Text 2:**")
                             if only_in_text2:
-                                # Sort and display
                                 sorted_words2 = sorted(list(only_in_text2))
-                                st.markdown(", ".join([f"`{word}`" for word in sorted_words2[:50]]))
-                                if len(only_in_text2) > 50:
-                                    st.caption(f"... and {len(only_in_text2) - 50} more")
+                                words_display = " · ".join([f"**{word}**" for word in sorted_words2[:30]])
+                                st.markdown(words_display)
+                                if len(only_in_text2) > 30:
+                                    st.caption(f"... and {len(only_in_text2) - 30} more words")
                             else:
                                 st.caption("None")
             
