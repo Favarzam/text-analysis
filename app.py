@@ -199,21 +199,101 @@ if st.button("🔍 Analyze Similarity", type="primary", use_container_width=True
                 st.markdown("---")
                 st.subheader("🔍 Text Differences")
                 
-                # Generate diff
-                diff = difflib.unified_diff(
-                    text1.splitlines(keepends=True),
-                    text2.splitlines(keepends=True),
-                    fromfile='Text 1',
-                    tofile='Text 2',
-                    lineterm=''
-                )
-                
-                diff_text = ''.join(diff)
-                
-                if diff_text:
-                    st.code(diff_text, language="diff")
-                else:
+                if text1 == text2:
                     st.success("✅ The texts are identical!")
+                else:
+                    # Word-level comparison
+                    words1 = text1.split()
+                    words2 = text2.split()
+                    
+                    # Get unique words in each text
+                    set1 = set(words1)
+                    set2 = set(words2)
+                    
+                    only_in_text1 = set1 - set2
+                    only_in_text2 = set2 - set1
+                    common_words = set1 & set2
+                    
+                    # Display statistics
+                    st.markdown("### Summary Statistics")
+                    stat_col1, stat_col2, stat_col3 = st.columns(3)
+                    
+                    with stat_col1:
+                        st.metric("Common Words", len(common_words))
+                    with stat_col2:
+                        st.metric("Only in Text 1", len(only_in_text1))
+                    with stat_col3:
+                        st.metric("Only in Text 2", len(only_in_text2))
+                    
+                    # Visual word comparison using SequenceMatcher
+                    st.markdown("### Highlighted Comparison")
+                    st.info("🔴 **Red background** = Removed/Changed | 🟢 **Green background** = Added/New | ⚪ No highlight = Unchanged")
+                    
+                    # Use SequenceMatcher for detailed comparison
+                    matcher = difflib.SequenceMatcher(None, text1, text2)
+                    opcodes = matcher.get_opcodes()
+                    
+                    # Create HTML for Text 1 (showing deletions/changes)
+                    html_text1 = "<div style='padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-family: monospace; line-height: 1.8; white-space: pre-wrap;'>"
+                    for tag, i1, i2, j1, j2 in opcodes:
+                        if tag == 'equal':
+                            html_text1 += text1[i1:i2]
+                        elif tag == 'delete':
+                            html_text1 += f"<span style='background-color: #ffcccb; padding: 2px 4px; border-radius: 3px;'>{text1[i1:i2]}</span>"
+                        elif tag == 'replace':
+                            html_text1 += f"<span style='background-color: #ffcccb; padding: 2px 4px; border-radius: 3px;'>{text1[i1:i2]}</span>"
+                    html_text1 += "</div>"
+                    
+                    # Create HTML for Text 2 (showing additions/changes)
+                    html_text2 = "<div style='padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-family: monospace; line-height: 1.8; white-space: pre-wrap;'>"
+                    for tag, i1, i2, j1, j2 in opcodes:
+                        if tag == 'equal':
+                            html_text2 += text2[j1:j2]
+                        elif tag == 'insert':
+                            html_text2 += f"<span style='background-color: #90EE90; padding: 2px 4px; border-radius: 3px;'>{text2[j1:j2]}</span>"
+                        elif tag == 'replace':
+                            html_text2 += f"<span style='background-color: #90EE90; padding: 2px 4px; border-radius: 3px;'>{text2[j1:j2]}</span>"
+                    html_text2 += "</div>"
+                    
+                    # Display side by side
+                    diff_col1, diff_col2 = st.columns(2)
+                    
+                    with diff_col1:
+                        st.markdown("**Text 1** (with deletions highlighted)")
+                        st.markdown(html_text1, unsafe_allow_html=True)
+                    
+                    with diff_col2:
+                        st.markdown("**Text 2** (with additions highlighted)")
+                        st.markdown(html_text2, unsafe_allow_html=True)
+                    
+                    # Show unique words if there are any
+                    if only_in_text1 or only_in_text2:
+                        st.markdown("---")
+                        st.markdown("### Unique Words Analysis")
+                        
+                        unique_col1, unique_col2 = st.columns(2)
+                        
+                        with unique_col1:
+                            st.markdown("**Words only in Text 1:**")
+                            if only_in_text1:
+                                # Sort and display
+                                sorted_words1 = sorted(list(only_in_text1))
+                                st.markdown(", ".join([f"`{word}`" for word in sorted_words1[:50]]))
+                                if len(only_in_text1) > 50:
+                                    st.caption(f"... and {len(only_in_text1) - 50} more")
+                            else:
+                                st.caption("None")
+                        
+                        with unique_col2:
+                            st.markdown("**Words only in Text 2:**")
+                            if only_in_text2:
+                                # Sort and display
+                                sorted_words2 = sorted(list(only_in_text2))
+                                st.markdown(", ".join([f"`{word}`" for word in sorted_words2[:50]]))
+                                if len(only_in_text2) > 50:
+                                    st.caption(f"... and {len(only_in_text2) - 50} more")
+                            else:
+                                st.caption("None")
             
             # Interpretation
             st.markdown("---")
