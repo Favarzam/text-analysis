@@ -12,7 +12,11 @@ A powerful Streamlit web application that analyzes and compares two texts to cal
 
 - 🎨 **Beautiful UI**: Modern, clean interface with intuitive design
 - 📈 **Visual Results**: Progress bars and metrics for easy interpretation
-- 🔍 **Text Differences**: Optional diff view to see exact differences
+- 🔍 **Smart Text Analysis**: Intelligent difference analysis with:
+  - 📋 Written summary of all changes
+  - 🗺️ Visual difference map showing change distribution
+  - 📝 Specific examples with excerpts from both texts
+  - Multiple comparison modes (Smart Analysis, Side-by-Side, Word Highlights)
 - 💡 **Smart Interpretation**: Automatic interpretation of similarity scores
 
 ## Installation
