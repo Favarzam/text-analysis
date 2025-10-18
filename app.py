@@ -2,7 +2,6 @@ import streamlit as st
 import difflib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 import re
 from collections import defaultdict, deque
 
@@ -228,20 +227,36 @@ def find_matching_indices(tokens1, tokens2):
         
         best_idx2 = None
         best_score = 0.0
-        for idx2 in candidate_indices:
-            norm2 = tokens2[idx2]['normalized']
+        best_variant_match = False
+        for idx2 in sorted(candidate_indices):
+            token2 = tokens2[idx2]
+            norm2 = token2['normalized']
             if not norm2:
                 continue
-            length_diff = abs(len(norm1) - len(norm2))
-            max_len = max(len(norm1), len(norm2))
-            if max_len and length_diff >= max_len * 0.6 and length_diff >= 3:
-                continue
-            score = difflib.SequenceMatcher(None, norm1, norm2).ratio()
+            
+            variant_match = (
+                norm1 in token2['variants'] or
+                norm2 in token1['variants'] or
+                (token1['variants'] & token2['variants'])
+            )
+            
+            if variant_match:
+                score = 1.0
+            else:
+                if norm1[0] != norm2[0]:
+                    continue
+                length_diff = abs(len(norm1) - len(norm2))
+                max_len = max(len(norm1), len(norm2))
+                if max_len and length_diff >= max_len * 0.6 and length_diff >= 3:
+                    continue
+                score = difflib.SequenceMatcher(None, norm1, norm2).ratio()
+            
             if score > best_score:
                 best_score = score
                 best_idx2 = idx2
+                best_variant_match = variant_match
         
-        if best_idx2 is not None and best_score >= 0.82:
+        if best_idx2 is not None and (best_variant_match or best_score >= 0.78):
             highlight1.add(idx1)
             highlight2.add(best_idx2)
             used_tokens2.add(best_idx2)
