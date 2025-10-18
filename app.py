@@ -21,14 +21,24 @@ Works with all languages and ignores punctuation. Perfect for comparing document
 
 # Function to calculate Jaccard similarity
 def jaccard_similarity(text1, text2):
-    """Calculate Jaccard similarity between two texts"""
-    # Convert to lowercase and split into words
-    words1 = set(text1.lower().split())
-    words2 = set(text2.lower().split())
+    """Calculate Jaccard similarity between two texts using normalized words"""
+    # Normalize words using the same function as highlighting
+    # This ensures consistency between the score and highlighting
+    normalized_words1 = set()
+    for word in text1.split():
+        normalized = normalize_word(word)
+        if normalized:  # Only add non-empty normalized words
+            normalized_words1.add(normalized)
+    
+    normalized_words2 = set()
+    for word in text2.split():
+        normalized = normalize_word(word)
+        if normalized:  # Only add non-empty normalized words
+            normalized_words2.add(normalized)
     
     # Calculate intersection and union
-    intersection = words1.intersection(words2)
-    union = words1.union(words2)
+    intersection = normalized_words1.intersection(normalized_words2)
+    union = normalized_words1.union(normalized_words2)
     
     # Return similarity percentage
     if len(union) == 0:
@@ -91,21 +101,34 @@ def escape_html(text):
 def normalize_word(word):
     """
     Normalize a word for comparison using strict rules:
-    1. Remove ALL punctuation and special characters
-    2. Convert to lowercase
-    3. Strip whitespace
-    4. Keep only alphanumeric characters (including Unicode like Chinese)
+    1. Strip all surrounding whitespace
+    2. Remove ALL punctuation and special characters
+    3. Convert to lowercase
+    4. Keep only alphanumeric characters (including Unicode like Chinese, Arabic, etc.)
     
     Returns the normalized word, or empty string if nothing remains
+    
+    Examples:
+    - "Visual:" -> "visual"
+    - "  Definition  " -> "definition"
+    - "(Carbonos/Kohlenstoffe/碳原子):" -> "carbonoskohlenstoffe碳原子"
+    - "  word  " -> "word"
     """
     if not word:
         return ""
     
+    # First strip any surrounding whitespace
+    word = word.strip()
+    
+    if not word:
+        return ""
+    
     # Remove all punctuation and special characters but keep alphanumeric and unicode
-    # This handles: quotes, parentheses, colons, slashes, etc.
+    # This handles: quotes, parentheses, colons, slashes, hyphens, etc.
+    # \w matches [a-zA-Z0-9_] plus Unicode letter characters
     normalized = re.sub(r'[^\w]', '', word, flags=re.UNICODE)
     
-    # Convert to lowercase and strip
+    # Convert to lowercase and strip any remaining whitespace
     normalized = normalized.lower().strip()
     
     return normalized
@@ -151,42 +174,55 @@ def tokenize_text(text):
     """
     Split text into tokens preserving original form alongside a normalized version
     and a set of matching variants.
+    Uses split() without arguments to handle any amount of whitespace.
     """
     tokens = []
+    # split() without arguments handles multiple spaces, tabs, newlines, etc.
     for word in text.split():
+        # Skip empty strings
+        if not word.strip():
+            continue
         normalized = normalize_word(word)
-        variants = generate_variants(normalized) if len(normalized) >= 2 else set()
-        tokens.append({
-            'original': word,
-            'normalized': normalized,
-            'variants': variants
-        })
+        # Only add tokens with valid normalized words
+        if normalized:
+            variants = generate_variants(normalized) if len(normalized) >= 2 else set()
+            tokens.append({
+                'original': word,
+                'normalized': normalized,
+                'variants': variants
+            })
     return tokens
 
 def find_matching_indices_jaccard(tokens1, tokens2):
     """
     Jaccard-style highlighting: Only exact word matches (case-insensitive, no punctuation).
     Simple and strict - a word must appear in both texts exactly to be highlighted.
+    Handles any amount of whitespace and punctuation differences.
     """
     highlight1 = set()
     highlight2 = set()
     
-    # Build lookup for exact normalized words
+    # Build lookup for exact normalized words (all valid words)
     norm_lookup2 = defaultdict(list)
     for idx2, token2 in enumerate(tokens2):
         norm = token2['normalized']
-        if norm and len(norm) >= 1:
+        # Include all non-empty normalized words
+        if norm:
             norm_lookup2[norm].append(idx2)
     
-    # Only exact matches
+    # Find exact matches - any word in text1 that appears anywhere in text2
     for idx1, token1 in enumerate(tokens1):
         norm1 = token1['normalized']
+        # Skip if no valid normalized word
         if not norm1:
             continue
         
+        # Check if this normalized word exists in text2
         candidates = norm_lookup2.get(norm1, [])
         if candidates:
+            # Highlight this word in text1
             highlight1.add(idx1)
+            # Highlight all occurrences of this word in text2
             for idx2 in candidates:
                 highlight2.add(idx2)
     
@@ -480,13 +516,8 @@ st.markdown("---")
 
 # Analysis options
 st.subheader("⚙️ Analysis Options")
-col_opt1, col_opt2 = st.columns(2)
 
-with col_opt1:
-    show_details = st.checkbox("Show detailed breakdown", value=True)
-
-with col_opt2:
-    show_diff = st.checkbox("Show text differences", value=False)
+show_diff = st.checkbox("Show text differences", value=False)
 
 # Calculate button and Reset button
 button_col1, button_col2 = st.columns([3, 1])
@@ -553,63 +584,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     # Progress bar for visual representation
     st.progress(jaccard_sim / 100)
     
-    st.markdown("---")
-    
-    if show_details:
-        st.markdown("### Detailed Breakdown")
-        st.markdown("""
-        Different algorithms measure similarity in different ways:
-        - **TF-IDF Cosine Similarity**: Measures semantic similarity based on term frequency and importance
-        - **Sequence Matcher**: Measures character-by-character similarity (best for detecting edits)
-        - **Jaccard Similarity**: Measures word overlap (unique words in common)
-        - **Character Similarity**: Measures character set overlap
-        """)
-        
-        # Create columns for detailed metrics
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-        
-        with metric_col1:
-            st.metric(
-                "TF-IDF Cosine",
-                f"{cosine_sim:.2f}%",
-                help="Semantic similarity using TF-IDF vectors"
-            )
-        
-        with metric_col2:
-            st.metric(
-                "Sequence Match",
-                f"{sequence_sim:.2f}%",
-                help="Character-by-character sequence similarity"
-            )
-        
-        with metric_col3:
-            st.metric(
-                "Jaccard (Words)",
-                f"{jaccard_sim:.2f}%",
-                help="Word overlap similarity"
-            )
-        
-        with metric_col4:
-            st.metric(
-                "Character Overlap",
-                f"{char_sim:.2f}%",
-                help="Character set similarity"
-            )
-        
-        # Visual comparison bars
-        st.markdown("### Visual Comparison")
-        st.markdown("**TF-IDF Cosine Similarity**")
-        st.progress(cosine_sim / 100)
-        
-        st.markdown("**Sequence Matcher**")
-        st.progress(sequence_sim / 100)
-        
-        st.markdown("**Jaccard Similarity (Words)**")
-        st.progress(jaccard_sim / 100)
-        
-        st.markdown("**Character Overlap**")
-        st.progress(char_sim / 100)
-    
     # Show differences if requested
     show_diff = st.session_state.show_diff
     if show_diff:
@@ -626,58 +600,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             
             **Note:** The word matching works across all languages and ignores punctuation marks.
             """, unsafe_allow_html=True)
-            
-            # Word-level comparison for statistics
-            words1 = text1.split()
-            words2 = text2.split()
-            
-            # Get unique words in each text
-            set1 = set(words1)
-            set2 = set(words2)
-            
-            only_in_text1 = set1 - set2
-            only_in_text2 = set2 - set1
-            common_words = set1 & set2
-            
-            # Display statistics
-            st.markdown("### 📊 Summary Statistics")
-            stat_col1, stat_col2, stat_col3 = st.columns(3)
-            
-            with stat_col1:
-                st.metric("✅ Common Words", len(common_words))
-            with stat_col2:
-                st.metric("➖ Only in Text 1", len(only_in_text1))
-            with stat_col3:
-                st.metric("➕ Only in Text 2", len(only_in_text2))
-            
-            # Show unique words if there are any
-            if only_in_text1 or only_in_text2:
-                st.markdown("---")
-                st.markdown("### 🔤 Unique Words Analysis")
-                
-                unique_col1, unique_col2 = st.columns(2)
-                
-                with unique_col1:
-                    st.markdown("**Words only in Text 1:**")
-                    if only_in_text1:
-                        sorted_words1 = sorted(list(only_in_text1))
-                        words_display = " · ".join([f"**{word}**" for word in sorted_words1[:30]])
-                        st.markdown(words_display)
-                        if len(only_in_text1) > 30:
-                            st.caption(f"... and {len(only_in_text1) - 30} more words")
-                    else:
-                        st.caption("None")
-                
-                with unique_col2:
-                    st.markdown("**Words only in Text 2:**")
-                    if only_in_text2:
-                        sorted_words2 = sorted(list(only_in_text2))
-                        words_display = " · ".join([f"**{word}**" for word in sorted_words2[:30]])
-                        st.markdown(words_display)
-                        if len(only_in_text2) > 30:
-                            st.caption(f"... and {len(only_in_text2) - 30} more words")
-                    else:
-                        st.caption("None")
     
     # Interpretation
     st.markdown("---")
@@ -765,16 +687,6 @@ with st.sidebar:
     **Highlighting:**
     - 🟨 Yellow = Words in both texts
     - ⬜ No color = Unique words
-    
-    ---
-    
-    ### 🔧 Additional Features
-    
-    Enable **"Show detailed breakdown"** to see:
-    - Word count statistics
-    - Common words list
-    - Unique words in each text
-    - Alternative similarity metrics
     
     ---
     
