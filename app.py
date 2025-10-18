@@ -4,6 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
+from collections import defaultdict, deque
 
 # Page configuration
 st.set_page_config(
@@ -110,28 +111,180 @@ def normalize_word(word):
     
     return normalized
 
-# Helper function to build a lookup set of normalized words
-def build_word_set(text):
+def generate_variants(normalized_word):
     """
-    Build a set of normalized words from text for fast lookup.
-    Returns a set of normalized words (empty words excluded).
+    Generate conservative variants of a normalized word to improve matching.
+    Handles common English suffixes while keeping the risk of false positives low.
     """
-    words = text.split()
-    word_set = set()
+    variants = set()
     
-    for word in words:
+    if not normalized_word:
+        return variants
+    
+    variants.add(normalized_word)
+    word_len = len(normalized_word)
+    
+    if word_len <= 3:
+        return variants
+    
+    # Handle plural forms
+    if normalized_word.endswith("ies") and word_len > 4:
+        variants.add(normalized_word[:-3] + "y")
+    if normalized_word.endswith("es") and word_len > 4:
+        variants.add(normalized_word[:-2])
+    if normalized_word.endswith("s") and word_len > 3:
+        variants.add(normalized_word[:-1])
+    
+    # Handle simple verb forms
+    if normalized_word.endswith("ing") and word_len > 5:
+        variants.add(normalized_word[:-3])
+        variants.add(normalized_word[:-3] + "e")
+    if normalized_word.endswith("ed") and word_len > 4:
+        variants.add(normalized_word[:-2])
+        variants.add(normalized_word[:-1])
+    
+    # Remove very short variants to avoid noise
+    variants = {variant for variant in variants if len(variant) >= 2}
+    
+    return variants
+
+def tokenize_text(text):
+    """
+    Split text into tokens preserving original form alongside a normalized version
+    and a set of matching variants.
+    """
+    tokens = []
+    for word in text.split():
         normalized = normalize_word(word)
-        if normalized and len(normalized) >= 2:  # Minimum 2 chars to avoid false positives
-            word_set.add(normalized)
+        variants = generate_variants(normalized) if len(normalized) >= 2 else set()
+        tokens.append({
+            'original': word,
+            'normalized': normalized,
+            'variants': variants
+        })
+    return tokens
+
+def find_matching_indices(tokens1, tokens2):
+    """
+    Match tokens between two lists using a combination of exact and fuzzy matching.
+    Returns the indices of tokens that should be highlighted for each list.
+    """
+    highlight1 = set()
+    highlight2 = set()
+    used_tokens2 = set()
     
-    return word_set
+    # Exact matches first (case-insensitive, punctuation stripped)
+    norm_lookup2 = defaultdict(deque)
+    for idx2, token2 in enumerate(tokens2):
+        norm = token2['normalized']
+        if norm and len(norm) >= 2:
+            norm_lookup2[norm].append(idx2)
+    
+    for idx1, token1 in enumerate(tokens1):
+        norm1 = token1['normalized']
+        if not norm1 or len(norm1) < 2:
+            continue
+        candidates = norm_lookup2.get(norm1)
+        if not candidates:
+            continue
+        while candidates:
+            idx2 = candidates.popleft()
+            if idx2 not in used_tokens2:
+                highlight1.add(idx1)
+                highlight2.add(idx2)
+                used_tokens2.add(idx2)
+                break
+    
+    # Prepare lookup for fuzzy candidates among unmatched tokens
+    variant_lookup2 = defaultdict(list)
+    for idx2, token2 in enumerate(tokens2):
+        if idx2 in used_tokens2:
+            continue
+        for variant in token2['variants']:
+            variant_lookup2[variant].append(idx2)
+    
+    for idx1, token1 in enumerate(tokens1):
+        if idx1 in highlight1:
+            continue
+        norm1 = token1['normalized']
+        if not norm1 or len(norm1) < 3:
+            continue
+        
+        candidate_indices = set()
+        for variant in token1['variants']:
+            candidate_indices.update(
+                idx2 for idx2 in variant_lookup2.get(variant, []) if idx2 not in used_tokens2
+            )
+        
+        # Fallback to a broader search for short documents
+        if not candidate_indices and len(tokens2) <= 200:
+            candidate_indices = {
+                idx2 for idx2, token2 in enumerate(tokens2)
+                if idx2 not in used_tokens2 and token2['normalized'] and len(token2['normalized']) >= 3
+            }
+        
+        if not candidate_indices:
+            continue
+        
+        best_idx2 = None
+        best_score = 0.0
+        for idx2 in candidate_indices:
+            norm2 = tokens2[idx2]['normalized']
+            if not norm2:
+                continue
+            length_diff = abs(len(norm1) - len(norm2))
+            max_len = max(len(norm1), len(norm2))
+            if max_len and length_diff >= max_len * 0.6 and length_diff >= 3:
+                continue
+            score = difflib.SequenceMatcher(None, norm1, norm2).ratio()
+            if score > best_score:
+                best_score = score
+                best_idx2 = idx2
+        
+        if best_idx2 is not None and best_score >= 0.82:
+            highlight1.add(idx1)
+            highlight2.add(best_idx2)
+            used_tokens2.add(best_idx2)
+    
+    return highlight1, highlight2
+
+def render_highlighted_text(tokens, highlighted_indices):
+    """
+    Build HTML snippet with highlighted tokens based on matched indices.
+    """
+    html_parts = [
+        "<div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>"
+    ]
+    
+    for idx, token in enumerate(tokens):
+        word_html = escape_html(token['original'])
+        if idx in highlighted_indices:
+            html_parts.append(
+                f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{word_html}</span> "
+            )
+        else:
+            html_parts.append(f"<span style='color: #333;'>{word_html}</span> ")
+    
+    html_parts.append("</div>")
+    return "".join(html_parts)
 
 # Create two columns for text input
 col1, col2 = st.columns(2)
 
+# Pre-compute highlighting if the analysis is done and differences are shown
+show_highlight = st.session_state.analyzed and st.session_state.show_diff
+highlight_html1 = highlight_html2 = None
+
+if show_highlight:
+    tokens_text1 = tokenize_text(st.session_state.text1)
+    tokens_text2 = tokenize_text(st.session_state.text2)
+    highlighted1, highlighted2 = find_matching_indices(tokens_text1, tokens_text2)
+    highlight_html1 = render_highlighted_text(tokens_text1, highlighted1)
+    highlight_html2 = render_highlighted_text(tokens_text2, highlighted2)
+
 with col1:
     st.subheader("Text 1")
-    if not st.session_state.analyzed or not st.session_state.show_diff:
+    if not show_highlight:
         text1 = st.text_area(
             "Enter first text",
             height=300,
@@ -142,35 +295,13 @@ with col1:
         )
         st.session_state.text1 = text1
     else:
-        # Show highlighted similarities using rule-based matching
-        text1 = st.session_state.text1
-        text2 = st.session_state.text2
-        words1_list = text1.split()
-        
-        # Build lookup set from text2 for efficient O(1) lookups
-        text2_word_set = build_word_set(text2)
-        
-        html1 = """
-        <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
-        """
-        for word in words1_list:
-            # Normalize and check if it exists in text2
-            normalized = normalize_word(word)
-            
-            if normalized and len(normalized) >= 2 and normalized in text2_word_set:
-                # Highlight matching words
-                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
-            else:
-                # Leave different words unhighlighted
-                html1 += f"<span style='color: #333;'>{escape_html(word)}</span> "
-        html1 += "</div>"
-        st.markdown(html1, unsafe_allow_html=True)
+        st.markdown(highlight_html1, unsafe_allow_html=True)
     
     st.caption(f"Characters: {len(st.session_state.text1)} | Words: {len(st.session_state.text1.split())}")
 
 with col2:
     st.subheader("Text 2")
-    if not st.session_state.analyzed or not st.session_state.show_diff:
+    if not show_highlight:
         text2 = st.text_area(
             "Enter second text",
             height=300,
@@ -181,29 +312,7 @@ with col2:
         )
         st.session_state.text2 = text2
     else:
-        # Show highlighted similarities using rule-based matching
-        text1 = st.session_state.text1
-        text2 = st.session_state.text2
-        words2_list = text2.split()
-        
-        # Build lookup set from text1 for efficient O(1) lookups
-        text1_word_set = build_word_set(text1)
-        
-        html2 = """
-        <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
-        """
-        for word in words2_list:
-            # Normalize and check if it exists in text1
-            normalized = normalize_word(word)
-            
-            if normalized and len(normalized) >= 2 and normalized in text1_word_set:
-                # Highlight matching words
-                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
-            else:
-                # Leave different words unhighlighted
-                html2 += f"<span style='color: #333;'>{escape_html(word)}</span> "
-        html2 += "</div>"
-        st.markdown(html2, unsafe_allow_html=True)
+        st.markdown(highlight_html2, unsafe_allow_html=True)
     
     st.caption(f"Characters: {len(st.session_state.text2)} | Words: {len(st.session_state.text2.split())}")
 
@@ -489,4 +598,3 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("Built with [Streamlit](https://streamlit.io)")
-
