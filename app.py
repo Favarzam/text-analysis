@@ -87,6 +87,11 @@ if 'analysis_results' not in st.session_state:
 def escape_html(text):
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
+# Helper function to strip punctuation from words for comparison
+def strip_punctuation(word):
+    """Remove punctuation from word for better matching"""
+    return re.sub(r'[^\w\s]', '', word)
+
 # Create two columns for text input
 col1, col2 = st.columns(2)
 
@@ -108,15 +113,16 @@ with col1:
         words1_list = text1.split()
         words2_list = st.session_state.text2.split()
         
-        # Get set of words in text2 for comparison
-        words2_set = set([w.lower() for w in words2_list])
+        # Get set of words in text2 for comparison (strip punctuation and lowercase)
+        words2_set = set([strip_punctuation(w).lower() for w in words2_list if strip_punctuation(w)])
         
         html1 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
         for word in words1_list:
-            # Check if this word exists in text2 (case-insensitive)
-            if word.lower() in words2_set:
+            # Check if this word exists in text2 (strip punctuation, case-insensitive)
+            word_clean = strip_punctuation(word).lower()
+            if word_clean and word_clean in words2_set:
                 # Highlight matching words
                 html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
             else:
@@ -145,15 +151,16 @@ with col2:
         words1_list = st.session_state.text1.split()
         words2_list = text2.split()
         
-        # Get set of words in text1 for comparison
-        words1_set = set([w.lower() for w in words1_list])
+        # Get set of words in text1 for comparison (strip punctuation and lowercase)
+        words1_set = set([strip_punctuation(w).lower() for w in words1_list if strip_punctuation(w)])
         
         html2 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
         for word in words2_list:
-            # Check if this word exists in text1 (case-insensitive)
-            if word.lower() in words1_set:
+            # Check if this word exists in text1 (strip punctuation, case-insensitive)
+            word_clean = strip_punctuation(word).lower()
+            if word_clean and word_clean in words1_set:
                 # Highlight matching words
                 html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
             else:
@@ -169,13 +176,20 @@ st.markdown("---")
 
 # Analysis options
 st.subheader("⚙️ Analysis Options")
-col_opt1, col_opt2 = st.columns(2)
+col_opt1, col_opt2, col_opt3 = st.columns(3)
 
 with col_opt1:
     show_details = st.checkbox("Show detailed breakdown", value=True)
 
 with col_opt2:
     show_diff = st.checkbox("Show text differences", value=False)
+
+with col_opt3:
+    primary_algorithm = st.selectbox(
+        "Primary Algorithm",
+        ["Average (All)", "TF-IDF Cosine", "Sequence Matcher", "Jaccard (Words)", "Character Overlap"],
+        help="Choose which algorithm to emphasize in the results"
+    )
 
 # Calculate button and Reset button
 button_col1, button_col2 = st.columns([3, 1])
@@ -201,13 +215,27 @@ if analyze_clicked:
         char_sim = character_similarity(text1, text2)
         average_sim = (jaccard_sim + cosine_sim + sequence_sim + char_sim) / 4
         
+        # Determine primary score based on selected algorithm
+        if primary_algorithm == "TF-IDF Cosine":
+            primary_score = cosine_sim
+        elif primary_algorithm == "Sequence Matcher":
+            primary_score = sequence_sim
+        elif primary_algorithm == "Jaccard (Words)":
+            primary_score = jaccard_sim
+        elif primary_algorithm == "Character Overlap":
+            primary_score = char_sim
+        else:  # Average (All)
+            primary_score = average_sim
+        
         # Store results in session state
         st.session_state.analysis_results = {
             'jaccard_sim': jaccard_sim,
             'cosine_sim': cosine_sim,
             'sequence_sim': sequence_sim,
             'char_sim': char_sim,
-            'average_sim': average_sim
+            'average_sim': average_sim,
+            'primary_score': primary_score,
+            'primary_algorithm': primary_algorithm
         }
         st.session_state.show_diff = show_diff
         st.session_state.analyzed = True
@@ -221,6 +249,8 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     sequence_sim = results['sequence_sim']
     char_sim = results['char_sim']
     average_sim = results['average_sim']
+    primary_score = results['primary_score']
+    primary_algorithm = results['primary_algorithm']
     text1 = st.session_state.text1
     text2 = st.session_state.text2
     
@@ -228,16 +258,16 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("📊 Similarity Results")
     
-    # Overall similarity (large display)
-    st.markdown("### Overall Similarity")
+    # Primary similarity score (large display)
+    st.markdown(f"### {primary_algorithm} Score")
     st.metric(
-        label="Average Similarity Score",
-        value=f"{average_sim:.2f}%",
-        help="Average of all similarity algorithms"
+        label=f"Similarity using {primary_algorithm}",
+        value=f"{primary_score:.2f}%",
+        help=f"Similarity score calculated using {primary_algorithm}"
     )
     
     # Progress bar for visual representation
-    st.progress(average_sim / 100)
+    st.progress(primary_score / 100)
     
     st.markdown("---")
     
@@ -367,13 +397,16 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("💡 Interpretation")
     
-    if average_sim >= 90:
+    # Use the primary score for interpretation
+    score_to_interpret = primary_score
+    
+    if score_to_interpret >= 90:
         st.success("🟢 **Very High Similarity**: The texts are nearly identical or very closely related.")
-    elif average_sim >= 70:
+    elif score_to_interpret >= 70:
         st.info("🔵 **High Similarity**: The texts share substantial content and meaning.")
-    elif average_sim >= 50:
+    elif score_to_interpret >= 50:
         st.warning("🟡 **Moderate Similarity**: The texts have some common elements but also notable differences.")
-    elif average_sim >= 30:
+    elif score_to_interpret >= 30:
         st.warning("🟠 **Low Similarity**: The texts have limited overlap.")
     else:
         st.error("🔴 **Very Low Similarity**: The texts are quite different from each other.")
