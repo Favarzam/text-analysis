@@ -15,8 +15,8 @@ st.set_page_config(
 # Title and description
 st.title("📝 Text Similarity Analyzer")
 st.markdown("""
-Compare two texts and calculate their similarity percentage using multiple algorithms.
-Each algorithm provides a different perspective on how similar the texts are.
+Compare two texts word-by-word to find similarities and differences.
+Works with all languages and ignores punctuation. Perfect for comparing documents, translations, or revisions.
 """)
 
 # Function to calculate Jaccard similarity
@@ -436,14 +436,8 @@ highlight_html1 = highlight_html2 = None
 if show_highlight:
     tokens_text1 = tokenize_text(st.session_state.text1)
     tokens_text2 = tokenize_text(st.session_state.text2)
-    # Get the algorithm that was used during analysis
-    algorithm = st.session_state.analysis_results.get('primary_algorithm', 'Average (All)')
-    highlighted1, highlighted2 = find_matching_indices(
-        tokens_text1, tokens_text2, 
-        algorithm=algorithm,
-        text1=st.session_state.text1,
-        text2=st.session_state.text2
-    )
+    # Use word-by-word exact matching (ignores punctuation, works across languages)
+    highlighted1, highlighted2 = find_matching_indices_jaccard(tokens_text1, tokens_text2)
     highlight_html1 = render_highlighted_text(tokens_text1, highlighted1)
     highlight_html2 = render_highlighted_text(tokens_text2, highlighted2)
 
@@ -486,20 +480,13 @@ st.markdown("---")
 
 # Analysis options
 st.subheader("⚙️ Analysis Options")
-col_opt1, col_opt2, col_opt3 = st.columns(3)
+col_opt1, col_opt2 = st.columns(2)
 
 with col_opt1:
     show_details = st.checkbox("Show detailed breakdown", value=True)
 
 with col_opt2:
     show_diff = st.checkbox("Show text differences", value=False)
-
-with col_opt3:
-    primary_algorithm = st.selectbox(
-        "Primary Algorithm",
-        ["Average (All)", "TF-IDF Cosine", "Sequence Matcher", "Jaccard (Words)", "Character Overlap"],
-        help="Choose which algorithm to use for similarity scoring AND text highlighting (when 'Show text differences' is enabled)"
-    )
 
 # Calculate button and Reset button
 button_col1, button_col2 = st.columns([3, 1])
@@ -515,27 +502,18 @@ if analyze_clicked:
     if not st.session_state.text1.strip() or not st.session_state.text2.strip():
         st.error("⚠️ Please enter both texts to compare.")
     else:
-        # Calculate all similarity metrics
+        # Calculate similarity using word-by-word matching (Jaccard)
         text1 = st.session_state.text1
         text2 = st.session_state.text2
         
+        # Primary method: Jaccard similarity (word overlap, ignores punctuation)
         jaccard_sim = jaccard_similarity(text1, text2)
+        
+        # Also calculate other metrics for detailed view
         cosine_sim = cosine_similarity_tfidf(text1, text2)
         sequence_sim = sequence_similarity(text1, text2)
         char_sim = character_similarity(text1, text2)
         average_sim = (jaccard_sim + cosine_sim + sequence_sim + char_sim) / 4
-        
-        # Determine primary score based on selected algorithm
-        if primary_algorithm == "TF-IDF Cosine":
-            primary_score = cosine_sim
-        elif primary_algorithm == "Sequence Matcher":
-            primary_score = sequence_sim
-        elif primary_algorithm == "Jaccard (Words)":
-            primary_score = jaccard_sim
-        elif primary_algorithm == "Character Overlap":
-            primary_score = char_sim
-        else:  # Average (All)
-            primary_score = average_sim
         
         # Store results in session state
         st.session_state.analysis_results = {
@@ -543,9 +521,7 @@ if analyze_clicked:
             'cosine_sim': cosine_sim,
             'sequence_sim': sequence_sim,
             'char_sim': char_sim,
-            'average_sim': average_sim,
-            'primary_score': primary_score,
-            'primary_algorithm': primary_algorithm
+            'average_sim': average_sim
         }
         st.session_state.show_diff = show_diff
         st.session_state.analyzed = True
@@ -559,8 +535,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     sequence_sim = results['sequence_sim']
     char_sim = results['char_sim']
     average_sim = results['average_sim']
-    primary_score = results['primary_score']
-    primary_algorithm = results['primary_algorithm']
     text1 = st.session_state.text1
     text2 = st.session_state.text2
     
@@ -568,16 +542,16 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("📊 Similarity Results")
     
-    # Primary similarity score (large display)
-    st.markdown(f"### {primary_algorithm} Score")
+    # Primary similarity score (word-by-word matching)
+    st.markdown("### Word-by-Word Similarity")
     st.metric(
-        label=f"Similarity using {primary_algorithm}",
-        value=f"{primary_score:.2f}%",
-        help=f"Similarity score calculated using {primary_algorithm}"
+        label="Similarity Score (Word Overlap)",
+        value=f"{jaccard_sim:.2f}%",
+        help="Percentage of words that appear in both texts (ignores punctuation and case)"
     )
     
     # Progress bar for visual representation
-    st.progress(primary_score / 100)
+    st.progress(jaccard_sim / 100)
     
     st.markdown("---")
     
@@ -645,22 +619,12 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         if text1 == text2:
             st.success("✅ The texts are identical!")
         else:
-            # Show which algorithm is being used for highlighting
-            algorithm_descriptions = {
-                "Jaccard (Words)": "exact word matches only",
-                "TF-IDF Cosine": "semantically important words that appear in both texts",
-                "Sequence Matcher": "words within matching text sequences/blocks",
-                "Character Overlap": "words with significant character overlap",
-                "Average (All)": "comprehensive matching (exact, variants, and fuzzy)"
-            }
-            algo_desc = algorithm_descriptions.get(primary_algorithm, "matched words")
-            
-            st.info(f"📝 **Similar words are highlighted in the boxes above using {primary_algorithm} algorithm**")
-            st.markdown(f"""
-            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = {algo_desc.capitalize()}
+            st.info("📝 **Similar words are highlighted in the boxes above**")
+            st.markdown("""
+            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = Words that appear in both texts (ignores punctuation and case)
             - <span style='color: #333;'>No highlight</span> = Words that are different or unique to each text
             
-            **Note:** Different algorithms highlight different types of similarities. Try changing the algorithm to see different highlighting patterns!
+            **Note:** The word matching works across all languages and ignores punctuation marks.
             """, unsafe_allow_html=True)
             
             # Word-level comparison for statistics
@@ -719,61 +683,111 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("💡 Interpretation")
     
-    # Use the primary score for interpretation
-    score_to_interpret = primary_score
-    
-    if score_to_interpret >= 90:
-        st.success("🟢 **Very High Similarity**: The texts are nearly identical or very closely related.")
-    elif score_to_interpret >= 70:
-        st.info("🔵 **High Similarity**: The texts share substantial content and meaning.")
-    elif score_to_interpret >= 50:
-        st.warning("🟡 **Moderate Similarity**: The texts have some common elements but also notable differences.")
-    elif score_to_interpret >= 30:
-        st.warning("🟠 **Low Similarity**: The texts have limited overlap.")
+    if jaccard_sim >= 90:
+        st.success("🟢 **Very High Similarity**: The texts share almost all the same words.")
+    elif jaccard_sim >= 70:
+        st.info("🔵 **High Similarity**: The texts share most of their words.")
+    elif jaccard_sim >= 50:
+        st.warning("🟡 **Moderate Similarity**: The texts have some words in common but also notable differences.")
+    elif jaccard_sim >= 30:
+        st.warning("🟠 **Low Similarity**: The texts have limited word overlap.")
     else:
-        st.error("🔴 **Very Low Similarity**: The texts are quite different from each other.")
+        st.error("🔴 **Very Low Similarity**: The texts share very few words in common.")
 
 # Sidebar with information
 with st.sidebar:
     st.header("ℹ️ About")
     st.markdown("""
-    This app analyzes text similarity using multiple algorithms to give you a comprehensive view of how similar two texts are.
+    Simple, accurate text comparison tool that works with any language.
     
-    ### How to Use
-    1. Paste or type your texts in the two text areas
-    2. Choose your analysis options
-    3. Click "Analyze Similarity"
-    4. Review the results
+    ### 📖 How to Use
+    1. **Paste** your texts into the two boxes
+    2. **Check** "Show text differences" (optional)
+    3. **Click** "Analyze Similarity"
+    4. **View** results and highlighted differences
     
-    ### Algorithms Used
+    ---
     
-    **TF-IDF Cosine Similarity**
-    - Best for: Semantic similarity
-    - Considers word importance and frequency
-    - Range: 0-100%
+    ### 🔍 How It Works
     
-    **Sequence Matcher**
-    - Best for: Detecting edits and changes
-    - Character-by-character comparison
-    - Range: 0-100%
+    **Word-by-Word Matching**
     
-    **Jaccard Similarity**
-    - Best for: Word overlap
-    - Compares unique words
-    - Range: 0-100%
+    The app compares texts by:
+    - Breaking each text into individual words
+    - Removing punctuation (periods, commas, quotes, etc.)
+    - Converting to lowercase
+    - Finding words that appear in both texts
+    - Calculating similarity percentage
     
-    **Character Overlap**
-    - Best for: Character-level comparison
-    - Compares unique characters
-    - Range: 0-100%
+    **Formula:** Jaccard Similarity
+    ```
+    Similarity = (Common Words) / (Total Unique Words) × 100
+    ```
     
-    ### Tips
-    - Use multiple algorithms for a complete picture
-    - Higher percentages indicate greater similarity
-    - Different algorithms may give different results
-    - **NEW:** Each algorithm now affects both the similarity score AND the text highlighting pattern when "Show text differences" is enabled
-    - Try switching algorithms to see different highlighting behaviors
+    ---
+    
+    ### 🌍 Language Support
+    
+    Works with **all languages**:
+    - ✅ Latin scripts (English, Spanish, French...)
+    - ✅ Arabic (العربية)
+    - ✅ Chinese (中文)
+    - ✅ Japanese (日本語)
+    - ✅ Korean (한국어)
+    - ✅ Cyrillic (Русский)
+    - ✅ Greek (Ελληνικά)
+    - ✅ Hebrew (עברית)
+    - ✅ And more!
+    
+    ---
+    
+    ### 💡 Use Cases
+    
+    Perfect for:
+    - 📄 Comparing document versions
+    - ✏️ Checking text revisions
+    - 🔄 Validating translations
+    - 📚 Educational content comparison
+    - 📝 Detecting plagiarism
+    - 🔍 Finding text duplicates
+    
+    ---
+    
+    ### 📊 Understanding Results
+    
+    **Similarity Score:**
+    - **90-100%** = Nearly identical
+    - **70-89%** = Very similar
+    - **50-69%** = Moderately similar
+    - **30-49%** = Somewhat similar
+    - **0-29%** = Very different
+    
+    **Highlighting:**
+    - 🟨 Yellow = Words in both texts
+    - ⬜ No color = Unique words
+    
+    ---
+    
+    ### 🔧 Additional Features
+    
+    Enable **"Show detailed breakdown"** to see:
+    - Word count statistics
+    - Common words list
+    - Unique words in each text
+    - Alternative similarity metrics
+    
+    ---
+    
+    ### 💻 Technical Details
+    
+    **Algorithm:** Jaccard Similarity Index
+    - Industry-standard metric
+    - Fast and efficient
+    - Language-agnostic
+    - Punctuation-insensitive
+    
+    ---
+    
     """)
     
-    st.markdown("---")
-    st.markdown("Built with [Streamlit](https://streamlit.io)")
+    st.markdown("Built with [Streamlit](https://streamlit.io) 🎈")
