@@ -92,6 +92,41 @@ def strip_punctuation(word):
     """Remove punctuation from word for better matching"""
     return re.sub(r'[^\w\s]', '', word)
 
+# Helper function to check if two words match with high precision
+def words_match(word1, word2):
+    """
+    Check if two words match with high precision.
+    Handles punctuation, case differences, and partial matches.
+    """
+    # Clean both words
+    clean1 = strip_punctuation(word1).lower().strip()
+    clean2 = strip_punctuation(word2).lower().strip()
+    
+    # Skip empty strings
+    if not clean1 or not clean2:
+        return False
+    
+    # Exact match after cleaning
+    if clean1 == clean2:
+        return True
+    
+    # Check if one is contained in the other (for cases like "Definition" vs "Definition:")
+    # Only match if the shorter word is substantial (at least 3 chars) and represents
+    # at least 70% of the longer word, OR if they share a common core
+    min_len = min(len(clean1), len(clean2))
+    max_len = max(len(clean1), len(clean2))
+    
+    if min_len >= 3:
+        # Check if shorter is in longer
+        if clean1 in clean2 or clean2 in clean1:
+            # Make sure it's a substantial match (at least 60% overlap for precision)
+            # This handles cases like "Definition:" vs "Definition" or 
+            # "(Carbonos/Kohlenstoffe/碳原子):" vs "(Carbonos/Kohlenstoffe/碳原子):Definition:"
+            if min_len / max_len >= 0.60:
+                return True
+    
+    return False
+
 # Create two columns for text input
 col1, col2 = st.columns(2)
 
@@ -113,21 +148,23 @@ with col1:
         words1_list = text1.split()
         words2_list = st.session_state.text2.split()
         
-        # Get set of words in text2 for comparison (strip punctuation and lowercase)
-        words2_set = set([strip_punctuation(w).lower() for w in words2_list if strip_punctuation(w)])
-        
         html1 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for word in words1_list:
-            # Check if this word exists in text2 (strip punctuation, case-insensitive)
-            word_clean = strip_punctuation(word).lower()
-            if word_clean and word_clean in words2_set:
+        for word1 in words1_list:
+            # Check if this word matches any word in text2 with high precision
+            matches = False
+            for word2 in words2_list:
+                if words_match(word1, word2):
+                    matches = True
+                    break
+            
+            if matches:
                 # Highlight matching words
-                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word1)}</span> "
             else:
                 # Leave different words unhighlighted
-                html1 += f"<span style='color: #333;'>{escape_html(word)}</span> "
+                html1 += f"<span style='color: #333;'>{escape_html(word1)}</span> "
         html1 += "</div>"
         st.markdown(html1, unsafe_allow_html=True)
     
@@ -151,21 +188,23 @@ with col2:
         words1_list = st.session_state.text1.split()
         words2_list = text2.split()
         
-        # Get set of words in text1 for comparison (strip punctuation and lowercase)
-        words1_set = set([strip_punctuation(w).lower() for w in words1_list if strip_punctuation(w)])
-        
         html2 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for word in words2_list:
-            # Check if this word exists in text1 (strip punctuation, case-insensitive)
-            word_clean = strip_punctuation(word).lower()
-            if word_clean and word_clean in words1_set:
+        for word2 in words2_list:
+            # Check if this word matches any word in text1 with high precision
+            matches = False
+            for word1 in words1_list:
+                if words_match(word2, word1):
+                    matches = True
+                    break
+            
+            if matches:
                 # Highlight matching words
-                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word2)}</span> "
             else:
                 # Leave different words unhighlighted
-                html2 += f"<span style='color: #333;'>{escape_html(word)}</span> "
+                html2 += f"<span style='color: #333;'>{escape_html(word2)}</span> "
         html2 += "</div>"
         st.markdown(html2, unsafe_allow_html=True)
     
