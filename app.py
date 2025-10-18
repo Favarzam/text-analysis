@@ -163,45 +163,159 @@ def tokenize_text(text):
         })
     return tokens
 
-def find_matching_indices(tokens1, tokens2):
+def find_matching_indices_jaccard(tokens1, tokens2):
     """
-    Match tokens between two lists using a combination of exact and fuzzy matching.
-    Returns the indices of tokens that should be highlighted for each list.
+    Jaccard-style highlighting: Only exact word matches (case-insensitive, no punctuation).
+    Simple and strict - a word must appear in both texts exactly to be highlighted.
+    """
+    highlight1 = set()
+    highlight2 = set()
+    
+    # Build lookup for exact normalized words
+    norm_lookup2 = defaultdict(list)
+    for idx2, token2 in enumerate(tokens2):
+        norm = token2['normalized']
+        if norm and len(norm) >= 1:
+            norm_lookup2[norm].append(idx2)
+    
+    # Only exact matches
+    for idx1, token1 in enumerate(tokens1):
+        norm1 = token1['normalized']
+        if not norm1:
+            continue
+        
+        candidates = norm_lookup2.get(norm1, [])
+        if candidates:
+            highlight1.add(idx1)
+            for idx2 in candidates:
+                highlight2.add(idx2)
+    
+    return highlight1, highlight2
+
+def find_matching_indices_tfidf(tokens1, tokens2, text1, text2):
+    """
+    TF-IDF-based highlighting: Highlights words with significant TF-IDF importance.
+    Words that are important in both texts get highlighted.
+    """
+    highlight1 = set()
+    highlight2 = set()
+    
+    if not text1.strip() or not text2.strip():
+        return highlight1, highlight2
+    
+    # Create TF-IDF vectorizer
+    vectorizer = TfidfVectorizer(lowercase=True, token_pattern=r'\b\w+\b')
+    
+    try:
+        tfidf_matrix = vectorizer.fit_transform([text1, text2])
+        feature_names = vectorizer.get_feature_names_out()
+        
+        # Get TF-IDF scores for each text
+        tfidf1 = dict(zip(feature_names, tfidf_matrix[0].toarray()[0]))
+        tfidf2 = dict(zip(feature_names, tfidf_matrix[1].toarray()[0]))
+        
+        # Threshold: words with TF-IDF > 0.1 in both texts
+        important_words = set()
+        for word in feature_names:
+            if tfidf1.get(word, 0) > 0.05 and tfidf2.get(word, 0) > 0.05:
+                important_words.add(word.lower())
+        
+        # Highlight tokens that match important words
+        for idx1, token1 in enumerate(tokens1):
+            if token1['normalized'] in important_words:
+                highlight1.add(idx1)
+        
+        for idx2, token2 in enumerate(tokens2):
+            if token2['normalized'] in important_words:
+                highlight2.add(idx2)
+    except:
+        # Fallback to exact matching if TF-IDF fails
+        return find_matching_indices_jaccard(tokens1, tokens2)
+    
+    return highlight1, highlight2
+
+def find_matching_indices_sequence(tokens1, tokens2, text1, text2):
+    """
+    Sequence Matcher highlighting: Highlights matching sequences/blocks of text.
+    Uses difflib to find contiguous matching blocks.
+    """
+    highlight1 = set()
+    highlight2 = set()
+    
+    # Use SequenceMatcher on the full text
+    matcher = difflib.SequenceMatcher(None, text1, text2)
+    matching_blocks = matcher.get_matching_blocks()
+    
+    # Convert character positions to word indices
+    # First, build character-to-word-index mappings
+    char_to_word1 = {}
+    char_to_word2 = {}
+    
+    pos1 = 0
+    for idx1, token1 in enumerate(tokens1):
+        word = token1['original']
+        for i in range(len(word)):
+            char_to_word1[pos1 + i] = idx1
+        pos1 += len(word) + 1  # +1 for space
+    
+    pos2 = 0
+    for idx2, token2 in enumerate(tokens2):
+        word = token2['original']
+        for i in range(len(word)):
+            char_to_word2[pos2 + i] = idx2
+        pos2 += len(word) + 1  # +1 for space
+    
+    # Highlight words that are part of matching blocks
+    for block in matching_blocks:
+        i, j, size = block
+        if size < 3:  # Ignore very short matches
+            continue
+        
+        # Add all word indices in this block
+        for char_pos in range(i, i + size):
+            if char_pos in char_to_word1:
+                highlight1.add(char_to_word1[char_pos])
+        
+        for char_pos in range(j, j + size):
+            if char_pos in char_to_word2:
+                highlight2.add(char_to_word2[char_pos])
+    
+    return highlight1, highlight2
+
+def find_matching_indices_comprehensive(tokens1, tokens2):
+    """
+    Comprehensive matching: Combines exact, variant, and fuzzy matching.
+    This is the most thorough approach, used for "Average (All)" mode.
     """
     highlight1 = set()
     highlight2 = set()
     
     # Build a comprehensive lookup for all normalized words in text2
-    # Allow multiple matches for the same word (don't enforce uniqueness)
     norm_lookup2 = defaultdict(list)
     for idx2, token2 in enumerate(tokens2):
         norm = token2['normalized']
-        if norm and len(norm) >= 1:  # Changed from >= 2 to >= 1
+        if norm and len(norm) >= 1:
             norm_lookup2[norm].append(idx2)
     
-    # First pass: Exact matches (case-insensitive, punctuation stripped)
+    # First pass: Exact matches
     for idx1, token1 in enumerate(tokens1):
         norm1 = token1['normalized']
-        if not norm1 or len(norm1) < 1:  # Changed from < 2 to < 1
+        if not norm1:
             continue
         
         candidates = norm_lookup2.get(norm1, [])
         if candidates:
-            # Match with the first available candidate
-            # Allow same word to be highlighted multiple times
             for idx2 in candidates:
                 if idx2 not in highlight2:
                     highlight1.add(idx1)
                     highlight2.add(idx2)
                     break
             else:
-                # If all candidates are used, still highlight in text1 if word appears in text2
                 if candidates:
                     highlight1.add(idx1)
-                    # Find the first candidate to highlight in text2 as well
                     highlight2.add(candidates[0])
     
-    # Second pass: Variant matches for unmatched tokens
+    # Second pass: Variant matches
     variant_lookup2 = defaultdict(list)
     for idx2, token2 in enumerate(tokens2):
         for variant in token2['variants']:
@@ -214,20 +328,18 @@ def find_matching_indices(tokens1, tokens2):
         if not norm1 or len(norm1) < 3:
             continue
         
-        # Check variant matches
         candidate_indices = []
         for variant in token1['variants']:
             candidate_indices.extend(variant_lookup2.get(variant, []))
         
         if candidate_indices:
-            # Match with the first available candidate
             for idx2 in candidate_indices:
                 if idx2 not in highlight2:
                     highlight1.add(idx1)
                     highlight2.add(idx2)
                     break
         
-        # Third pass: Fuzzy matching for remaining unmatched tokens
+        # Third pass: Fuzzy matching
         if idx1 not in highlight1:
             candidate_indices = []
             for idx2, token2 in enumerate(tokens2):
@@ -237,7 +349,6 @@ def find_matching_indices(tokens1, tokens2):
                 if not norm2 or len(norm2) < 3:
                     continue
                 
-                # Quick filters
                 if norm1[0] != norm2[0]:
                     continue
                 
@@ -246,19 +357,71 @@ def find_matching_indices(tokens1, tokens2):
                 if max_len and length_diff >= max_len * 0.5 and length_diff >= 3:
                     continue
                 
-                # Calculate similarity
                 score = difflib.SequenceMatcher(None, norm1, norm2).ratio()
-                if score >= 0.75:  # Lowered from 0.78 to 0.75
+                if score >= 0.75:
                     candidate_indices.append((score, idx2))
             
             if candidate_indices:
-                # Pick the best match
                 candidate_indices.sort(reverse=True)
                 best_score, best_idx2 = candidate_indices[0]
                 highlight1.add(idx1)
                 highlight2.add(best_idx2)
     
     return highlight1, highlight2
+
+def find_matching_indices_character(tokens1, tokens2):
+    """
+    Character-based highlighting: Highlights words that share significant character overlap.
+    """
+    highlight1 = set()
+    highlight2 = set()
+    
+    # For each token, find tokens in the other text with high character overlap
+    for idx1, token1 in enumerate(tokens1):
+        norm1 = token1['normalized']
+        if not norm1 or len(norm1) < 2:
+            continue
+        
+        chars1 = set(norm1)
+        best_overlap = 0
+        best_idx2 = None
+        
+        for idx2, token2 in enumerate(tokens2):
+            norm2 = token2['normalized']
+            if not norm2 or len(norm2) < 2:
+                continue
+            
+            chars2 = set(norm2)
+            intersection = len(chars1 & chars2)
+            union = len(chars1 | chars2)
+            
+            if union > 0:
+                overlap = intersection / union
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_idx2 = idx2
+        
+        # Threshold: at least 60% character overlap
+        if best_overlap >= 0.6 and best_idx2 is not None:
+            highlight1.add(idx1)
+            highlight2.add(best_idx2)
+    
+    return highlight1, highlight2
+
+def find_matching_indices(tokens1, tokens2, algorithm="Average (All)", text1="", text2=""):
+    """
+    Main function that routes to the appropriate highlighting algorithm.
+    """
+    if algorithm == "Jaccard (Words)":
+        return find_matching_indices_jaccard(tokens1, tokens2)
+    elif algorithm == "TF-IDF Cosine":
+        return find_matching_indices_tfidf(tokens1, tokens2, text1, text2)
+    elif algorithm == "Sequence Matcher":
+        return find_matching_indices_sequence(tokens1, tokens2, text1, text2)
+    elif algorithm == "Character Overlap":
+        return find_matching_indices_character(tokens1, tokens2)
+    else:  # "Average (All)" or default
+        return find_matching_indices_comprehensive(tokens1, tokens2)
 
 def render_highlighted_text(tokens, highlighted_indices):
     """
@@ -290,7 +453,14 @@ highlight_html1 = highlight_html2 = None
 if show_highlight:
     tokens_text1 = tokenize_text(st.session_state.text1)
     tokens_text2 = tokenize_text(st.session_state.text2)
-    highlighted1, highlighted2 = find_matching_indices(tokens_text1, tokens_text2)
+    # Get the algorithm that was used during analysis
+    algorithm = st.session_state.analysis_results.get('primary_algorithm', 'Average (All)')
+    highlighted1, highlighted2 = find_matching_indices(
+        tokens_text1, tokens_text2, 
+        algorithm=algorithm,
+        text1=st.session_state.text1,
+        text2=st.session_state.text2
+    )
     highlight_html1 = render_highlighted_text(tokens_text1, highlighted1)
     highlight_html2 = render_highlighted_text(tokens_text2, highlighted2)
 
@@ -345,7 +515,7 @@ with col_opt3:
     primary_algorithm = st.selectbox(
         "Primary Algorithm",
         ["Average (All)", "TF-IDF Cosine", "Sequence Matcher", "Jaccard (Words)", "Character Overlap"],
-        help="Choose which algorithm to emphasize in the results"
+        help="Choose which algorithm to use for similarity scoring AND text highlighting (when 'Show text differences' is enabled)"
     )
 
 # Calculate button and Reset button
@@ -492,10 +662,22 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         if text1 == text2:
             st.success("✅ The texts are identical!")
         else:
-            st.info("📝 **Similar words are highlighted in the boxes above**")
-            st.markdown("""
-            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = Words that appear in both texts
+            # Show which algorithm is being used for highlighting
+            algorithm_descriptions = {
+                "Jaccard (Words)": "exact word matches only",
+                "TF-IDF Cosine": "semantically important words that appear in both texts",
+                "Sequence Matcher": "words within matching text sequences/blocks",
+                "Character Overlap": "words with significant character overlap",
+                "Average (All)": "comprehensive matching (exact, variants, and fuzzy)"
+            }
+            algo_desc = algorithm_descriptions.get(primary_algorithm, "matched words")
+            
+            st.info(f"📝 **Similar words are highlighted in the boxes above using {primary_algorithm} algorithm**")
+            st.markdown(f"""
+            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = {algo_desc.capitalize()}
             - <span style='color: #333;'>No highlight</span> = Words that are different or unique to each text
+            
+            **Note:** Different algorithms highlight different types of similarities. Try changing the algorithm to see different highlighting patterns!
             """, unsafe_allow_html=True)
             
             # Word-level comparison for statistics
@@ -606,6 +788,8 @@ with st.sidebar:
     - Use multiple algorithms for a complete picture
     - Higher percentages indicate greater similarity
     - Different algorithms may give different results
+    - **NEW:** Each algorithm now affects both the similarity score AND the text highlighting pattern when "Show text differences" is enabled
+    - Try switching algorithms to see different highlighting behaviors
     """)
     
     st.markdown("---")
