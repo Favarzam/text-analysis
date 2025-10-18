@@ -103,26 +103,25 @@ with col1:
         )
         st.session_state.text1 = text1
     else:
-        # Show highlighted differences
+        # Show highlighted similarities
         text1 = st.session_state.text1
         words1_list = text1.split()
         words2_list = st.session_state.text2.split()
         
-        matcher = difflib.SequenceMatcher(None, words1_list, words2_list)
-        opcodes = matcher.get_opcodes()
+        # Get set of words in text2 for comparison
+        words2_set = set([w.lower() for w in words2_list])
         
         html1 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for tag, i1, i2, j1, j2 in opcodes:
-            if tag == 'equal':
-                html1 += ' '.join([f"<span style='color: #333;'>{escape_html(w)}</span>" for w in words1_list[i1:i2]]) + ' '
-            elif tag == 'delete':
-                for word in words1_list[i1:i2]:
-                    html1 += f"<span style='background-color: #ffebee; color: #c62828; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block; text-decoration: line-through;'>{escape_html(word)}</span> "
-            elif tag == 'replace':
-                for word in words1_list[i1:i2]:
-                    html1 += f"<span style='background-color: #fff3e0; color: #e65100; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+        for word in words1_list:
+            # Check if this word exists in text2 (case-insensitive)
+            if word.lower() in words2_set:
+                # Highlight matching words
+                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+            else:
+                # Leave different words unhighlighted
+                html1 += f"<span style='color: #333;'>{escape_html(word)}</span> "
         html1 += "</div>"
         st.markdown(html1, unsafe_allow_html=True)
     
@@ -141,26 +140,25 @@ with col2:
         )
         st.session_state.text2 = text2
     else:
-        # Show highlighted differences
+        # Show highlighted similarities
         text2 = st.session_state.text2
         words1_list = st.session_state.text1.split()
         words2_list = text2.split()
         
-        matcher = difflib.SequenceMatcher(None, words1_list, words2_list)
-        opcodes = matcher.get_opcodes()
+        # Get set of words in text1 for comparison
+        words1_set = set([w.lower() for w in words1_list])
         
         html2 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for tag, i1, i2, j1, j2 in opcodes:
-            if tag == 'equal':
-                html2 += ' '.join([f"<span style='color: #333;'>{escape_html(w)}</span>" for w in words2_list[j1:j2]]) + ' '
-            elif tag == 'insert':
-                for word in words2_list[j1:j2]:
-                    html2 += f"<span style='background-color: #e8f5e9; color: #2e7d32; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
-            elif tag == 'replace':
-                for word in words2_list[j1:j2]:
-                    html2 += f"<span style='background-color: #fff3e0; color: #e65100; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+        for word in words2_list:
+            # Check if this word exists in text1 (case-insensitive)
+            if word.lower() in words1_set:
+                # Highlight matching words
+                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
+            else:
+                # Leave different words unhighlighted
+                html2 += f"<span style='color: #333;'>{escape_html(word)}</span> "
         html2 += "</div>"
         st.markdown(html2, unsafe_allow_html=True)
     
@@ -307,11 +305,10 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         if text1 == text2:
             st.success("✅ The texts are identical!")
         else:
-            st.info("📝 **Text differences are highlighted in the boxes above**")
+            st.info("📝 **Similar words are highlighted in the boxes above**")
             st.markdown("""
-            - <span style='background-color: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Green</span> = Words added in Text 2
-            - <span style='background-color: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; font-weight: 500; text-decoration: line-through;'>Red strikethrough</span> = Words removed from Text 1
-            - <span style='background-color: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Orange</span> = Words modified
+            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = Words that appear in both texts
+            - <span style='color: #333;'>No highlight</span> = Words that are different or unique to each text
             """, unsafe_allow_html=True)
             
             # Word-level comparison for statistics
