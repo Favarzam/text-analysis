@@ -87,45 +87,44 @@ if 'analysis_results' not in st.session_state:
 def escape_html(text):
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
-# Helper function to strip punctuation from words for comparison
-def strip_punctuation(word):
-    """Remove punctuation from word for better matching"""
-    return re.sub(r'[^\w\s]', '', word)
+# Helper function to normalize words for accurate matching
+def normalize_word(word):
+    """
+    Normalize a word for comparison using strict rules:
+    1. Remove ALL punctuation and special characters
+    2. Convert to lowercase
+    3. Strip whitespace
+    4. Keep only alphanumeric characters (including Unicode like Chinese)
+    
+    Returns the normalized word, or empty string if nothing remains
+    """
+    if not word:
+        return ""
+    
+    # Remove all punctuation and special characters but keep alphanumeric and unicode
+    # This handles: quotes, parentheses, colons, slashes, etc.
+    normalized = re.sub(r'[^\w]', '', word, flags=re.UNICODE)
+    
+    # Convert to lowercase and strip
+    normalized = normalized.lower().strip()
+    
+    return normalized
 
-# Helper function to check if two words match with high precision
-def words_match(word1, word2):
+# Helper function to build a lookup set of normalized words
+def build_word_set(text):
     """
-    Check if two words match with high precision.
-    Handles punctuation, case differences, and partial matches.
+    Build a set of normalized words from text for fast lookup.
+    Returns a set of normalized words (empty words excluded).
     """
-    # Clean both words
-    clean1 = strip_punctuation(word1).lower().strip()
-    clean2 = strip_punctuation(word2).lower().strip()
+    words = text.split()
+    word_set = set()
     
-    # Skip empty strings
-    if not clean1 or not clean2:
-        return False
+    for word in words:
+        normalized = normalize_word(word)
+        if normalized and len(normalized) >= 2:  # Minimum 2 chars to avoid false positives
+            word_set.add(normalized)
     
-    # Exact match after cleaning
-    if clean1 == clean2:
-        return True
-    
-    # Check if one is contained in the other (for cases like "Definition" vs "Definition:")
-    # Only match if the shorter word is substantial (at least 3 chars) and represents
-    # at least 70% of the longer word, OR if they share a common core
-    min_len = min(len(clean1), len(clean2))
-    max_len = max(len(clean1), len(clean2))
-    
-    if min_len >= 3:
-        # Check if shorter is in longer
-        if clean1 in clean2 or clean2 in clean1:
-            # Make sure it's a substantial match (at least 60% overlap for precision)
-            # This handles cases like "Definition:" vs "Definition" or 
-            # "(Carbonos/Kohlenstoffe/碳原子):" vs "(Carbonos/Kohlenstoffe/碳原子):Definition:"
-            if min_len / max_len >= 0.60:
-                return True
-    
-    return False
+    return word_set
 
 # Create two columns for text input
 col1, col2 = st.columns(2)
@@ -143,28 +142,27 @@ with col1:
         )
         st.session_state.text1 = text1
     else:
-        # Show highlighted similarities
+        # Show highlighted similarities using rule-based matching
         text1 = st.session_state.text1
+        text2 = st.session_state.text2
         words1_list = text1.split()
-        words2_list = st.session_state.text2.split()
+        
+        # Build lookup set from text2 for efficient O(1) lookups
+        text2_word_set = build_word_set(text2)
         
         html1 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for word1 in words1_list:
-            # Check if this word matches any word in text2 with high precision
-            matches = False
-            for word2 in words2_list:
-                if words_match(word1, word2):
-                    matches = True
-                    break
+        for word in words1_list:
+            # Normalize and check if it exists in text2
+            normalized = normalize_word(word)
             
-            if matches:
+            if normalized and len(normalized) >= 2 and normalized in text2_word_set:
                 # Highlight matching words
-                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word1)}</span> "
+                html1 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
             else:
                 # Leave different words unhighlighted
-                html1 += f"<span style='color: #333;'>{escape_html(word1)}</span> "
+                html1 += f"<span style='color: #333;'>{escape_html(word)}</span> "
         html1 += "</div>"
         st.markdown(html1, unsafe_allow_html=True)
     
@@ -183,28 +181,27 @@ with col2:
         )
         st.session_state.text2 = text2
     else:
-        # Show highlighted similarities
+        # Show highlighted similarities using rule-based matching
+        text1 = st.session_state.text1
         text2 = st.session_state.text2
-        words1_list = st.session_state.text1.split()
         words2_list = text2.split()
+        
+        # Build lookup set from text1 for efficient O(1) lookups
+        text1_word_set = build_word_set(text1)
         
         html2 = """
         <div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>
         """
-        for word2 in words2_list:
-            # Check if this word matches any word in text1 with high precision
-            matches = False
-            for word1 in words1_list:
-                if words_match(word2, word1):
-                    matches = True
-                    break
+        for word in words2_list:
+            # Normalize and check if it exists in text1
+            normalized = normalize_word(word)
             
-            if matches:
+            if normalized and len(normalized) >= 2 and normalized in text1_word_set:
                 # Highlight matching words
-                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word2)}</span> "
+                html2 += f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{escape_html(word)}</span> "
             else:
                 # Leave different words unhighlighted
-                html2 += f"<span style='color: #333;'>{escape_html(word2)}</span> "
+                html2 += f"<span style='color: #333;'>{escape_html(word)}</span> "
         html2 += "</div>"
         st.markdown(html2, unsafe_allow_html=True)
     
