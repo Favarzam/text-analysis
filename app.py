@@ -170,35 +170,40 @@ def find_matching_indices(tokens1, tokens2):
     """
     highlight1 = set()
     highlight2 = set()
-    used_tokens2 = set()
     
-    # Exact matches first (case-insensitive, punctuation stripped)
-    norm_lookup2 = defaultdict(deque)
+    # Build a comprehensive lookup for all normalized words in text2
+    # Allow multiple matches for the same word (don't enforce uniqueness)
+    norm_lookup2 = defaultdict(list)
     for idx2, token2 in enumerate(tokens2):
         norm = token2['normalized']
-        if norm and len(norm) >= 2:
+        if norm and len(norm) >= 1:  # Changed from >= 2 to >= 1
             norm_lookup2[norm].append(idx2)
     
+    # First pass: Exact matches (case-insensitive, punctuation stripped)
     for idx1, token1 in enumerate(tokens1):
         norm1 = token1['normalized']
-        if not norm1 or len(norm1) < 2:
+        if not norm1 or len(norm1) < 1:  # Changed from < 2 to < 1
             continue
-        candidates = norm_lookup2.get(norm1)
-        if not candidates:
-            continue
-        while candidates:
-            idx2 = candidates.popleft()
-            if idx2 not in used_tokens2:
-                highlight1.add(idx1)
-                highlight2.add(idx2)
-                used_tokens2.add(idx2)
-                break
+        
+        candidates = norm_lookup2.get(norm1, [])
+        if candidates:
+            # Match with the first available candidate
+            # Allow same word to be highlighted multiple times
+            for idx2 in candidates:
+                if idx2 not in highlight2:
+                    highlight1.add(idx1)
+                    highlight2.add(idx2)
+                    break
+            else:
+                # If all candidates are used, still highlight in text1 if word appears in text2
+                if candidates:
+                    highlight1.add(idx1)
+                    # Find the first candidate to highlight in text2 as well
+                    highlight2.add(candidates[0])
     
-    # Prepare lookup for fuzzy candidates among unmatched tokens
+    # Second pass: Variant matches for unmatched tokens
     variant_lookup2 = defaultdict(list)
     for idx2, token2 in enumerate(tokens2):
-        if idx2 in used_tokens2:
-            continue
         for variant in token2['variants']:
             variant_lookup2[variant].append(idx2)
     
@@ -209,57 +214,49 @@ def find_matching_indices(tokens1, tokens2):
         if not norm1 or len(norm1) < 3:
             continue
         
-        candidate_indices = set()
+        # Check variant matches
+        candidate_indices = []
         for variant in token1['variants']:
-            candidate_indices.update(
-                idx2 for idx2 in variant_lookup2.get(variant, []) if idx2 not in used_tokens2
-            )
+            candidate_indices.extend(variant_lookup2.get(variant, []))
         
-        # Fallback to a broader search for short documents
-        if not candidate_indices and len(tokens2) <= 200:
-            candidate_indices = {
-                idx2 for idx2, token2 in enumerate(tokens2)
-                if idx2 not in used_tokens2 and token2['normalized'] and len(token2['normalized']) >= 3
-            }
+        if candidate_indices:
+            # Match with the first available candidate
+            for idx2 in candidate_indices:
+                if idx2 not in highlight2:
+                    highlight1.add(idx1)
+                    highlight2.add(idx2)
+                    break
         
-        if not candidate_indices:
-            continue
-        
-        best_idx2 = None
-        best_score = 0.0
-        best_variant_match = False
-        for idx2 in sorted(candidate_indices):
-            token2 = tokens2[idx2]
-            norm2 = token2['normalized']
-            if not norm2:
-                continue
-            
-            variant_match = (
-                norm1 in token2['variants'] or
-                norm2 in token1['variants'] or
-                (token1['variants'] & token2['variants'])
-            )
-            
-            if variant_match:
-                score = 1.0
-            else:
+        # Third pass: Fuzzy matching for remaining unmatched tokens
+        if idx1 not in highlight1:
+            candidate_indices = []
+            for idx2, token2 in enumerate(tokens2):
+                if idx2 in highlight2:
+                    continue
+                norm2 = token2['normalized']
+                if not norm2 or len(norm2) < 3:
+                    continue
+                
+                # Quick filters
                 if norm1[0] != norm2[0]:
                     continue
+                
                 length_diff = abs(len(norm1) - len(norm2))
                 max_len = max(len(norm1), len(norm2))
-                if max_len and length_diff >= max_len * 0.6 and length_diff >= 3:
+                if max_len and length_diff >= max_len * 0.5 and length_diff >= 3:
                     continue
+                
+                # Calculate similarity
                 score = difflib.SequenceMatcher(None, norm1, norm2).ratio()
+                if score >= 0.75:  # Lowered from 0.78 to 0.75
+                    candidate_indices.append((score, idx2))
             
-            if score > best_score:
-                best_score = score
-                best_idx2 = idx2
-                best_variant_match = variant_match
-        
-        if best_idx2 is not None and (best_variant_match or best_score >= 0.78):
-            highlight1.add(idx1)
-            highlight2.add(best_idx2)
-            used_tokens2.add(best_idx2)
+            if candidate_indices:
+                # Pick the best match
+                candidate_indices.sort(reverse=True)
+                best_score, best_idx2 = candidate_indices[0]
+                highlight1.add(idx1)
+                highlight2.add(best_idx2)
     
     return highlight1, highlight2
 
