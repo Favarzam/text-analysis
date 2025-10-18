@@ -80,6 +80,8 @@ if 'analyzed' not in st.session_state:
     st.session_state.analyzed = False
 if 'show_diff' not in st.session_state:
     st.session_state.show_diff = False
+if 'analysis_results' not in st.session_state:
+    st.session_state.analysis_results = None
 
 # Helper function to escape HTML
 def escape_html(text):
@@ -191,174 +193,193 @@ if analyze_clicked:
     if not st.session_state.text1.strip() or not st.session_state.text2.strip():
         st.error("⚠️ Please enter both texts to compare.")
     else:
-        # Update session state
-        st.session_state.analyzed = True
-        st.session_state.show_diff = show_diff
+        # Calculate all similarity metrics
         text1 = st.session_state.text1
         text2 = st.session_state.text2
-        with st.spinner("Analyzing texts..."):
-            # Calculate all similarity metrics
-            jaccard_sim = jaccard_similarity(text1, text2)
-            cosine_sim = cosine_similarity_tfidf(text1, text2)
-            sequence_sim = sequence_similarity(text1, text2)
-            char_sim = character_similarity(text1, text2)
-            
-            # Calculate average similarity
-            average_sim = (jaccard_sim + cosine_sim + sequence_sim + char_sim) / 4
-            
-            # Display results
-            st.markdown("---")
-            st.subheader("📊 Similarity Results")
-            
-            # Overall similarity (large display)
-            st.markdown("### Overall Similarity")
+        
+        jaccard_sim = jaccard_similarity(text1, text2)
+        cosine_sim = cosine_similarity_tfidf(text1, text2)
+        sequence_sim = sequence_similarity(text1, text2)
+        char_sim = character_similarity(text1, text2)
+        average_sim = (jaccard_sim + cosine_sim + sequence_sim + char_sim) / 4
+        
+        # Store results in session state
+        st.session_state.analysis_results = {
+            'jaccard_sim': jaccard_sim,
+            'cosine_sim': cosine_sim,
+            'sequence_sim': sequence_sim,
+            'char_sim': char_sim,
+            'average_sim': average_sim
+        }
+        st.session_state.show_diff = show_diff
+        st.session_state.analyzed = True
+        st.rerun()
+
+# Display results if analysis has been performed
+if st.session_state.analyzed and st.session_state.analysis_results:
+    results = st.session_state.analysis_results
+    jaccard_sim = results['jaccard_sim']
+    cosine_sim = results['cosine_sim']
+    sequence_sim = results['sequence_sim']
+    char_sim = results['char_sim']
+    average_sim = results['average_sim']
+    text1 = st.session_state.text1
+    text2 = st.session_state.text2
+    
+    # Display results
+    st.markdown("---")
+    st.subheader("📊 Similarity Results")
+    
+    # Overall similarity (large display)
+    st.markdown("### Overall Similarity")
+    st.metric(
+        label="Average Similarity Score",
+        value=f"{average_sim:.2f}%",
+        help="Average of all similarity algorithms"
+    )
+    
+    # Progress bar for visual representation
+    st.progress(average_sim / 100)
+    
+    st.markdown("---")
+    
+    if show_details:
+        st.markdown("### Detailed Breakdown")
+        st.markdown("""
+        Different algorithms measure similarity in different ways:
+        - **TF-IDF Cosine Similarity**: Measures semantic similarity based on term frequency and importance
+        - **Sequence Matcher**: Measures character-by-character similarity (best for detecting edits)
+        - **Jaccard Similarity**: Measures word overlap (unique words in common)
+        - **Character Similarity**: Measures character set overlap
+        """)
+        
+        # Create columns for detailed metrics
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        
+        with metric_col1:
             st.metric(
-                label="Average Similarity Score",
-                value=f"{average_sim:.2f}%",
-                help="Average of all similarity algorithms"
+                "TF-IDF Cosine",
+                f"{cosine_sim:.2f}%",
+                help="Semantic similarity using TF-IDF vectors"
             )
+        
+        with metric_col2:
+            st.metric(
+                "Sequence Match",
+                f"{sequence_sim:.2f}%",
+                help="Character-by-character sequence similarity"
+            )
+        
+        with metric_col3:
+            st.metric(
+                "Jaccard (Words)",
+                f"{jaccard_sim:.2f}%",
+                help="Word overlap similarity"
+            )
+        
+        with metric_col4:
+            st.metric(
+                "Character Overlap",
+                f"{char_sim:.2f}%",
+                help="Character set similarity"
+            )
+        
+        # Visual comparison bars
+        st.markdown("### Visual Comparison")
+        st.markdown("**TF-IDF Cosine Similarity**")
+        st.progress(cosine_sim / 100)
+        
+        st.markdown("**Sequence Matcher**")
+        st.progress(sequence_sim / 100)
+        
+        st.markdown("**Jaccard Similarity (Words)**")
+        st.progress(jaccard_sim / 100)
+        
+        st.markdown("**Character Overlap**")
+        st.progress(char_sim / 100)
+    
+    # Show differences if requested
+    show_diff = st.session_state.show_diff
+    if show_diff:
+        st.markdown("---")
+        st.subheader("🔍 Text Differences")
+        
+        if text1 == text2:
+            st.success("✅ The texts are identical!")
+        else:
+            st.info("📝 **Text differences are highlighted in the boxes above**")
+            st.markdown("""
+            - <span style='background-color: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Green</span> = Words added in Text 2
+            - <span style='background-color: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; font-weight: 500; text-decoration: line-through;'>Red strikethrough</span> = Words removed from Text 1
+            - <span style='background-color: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Orange</span> = Words modified
+            """, unsafe_allow_html=True)
             
-            # Progress bar for visual representation
-            st.progress(average_sim / 100)
+            # Word-level comparison for statistics
+            words1 = text1.split()
+            words2 = text2.split()
             
-            st.markdown("---")
+            # Get unique words in each text
+            set1 = set(words1)
+            set2 = set(words2)
             
-            if show_details:
-                st.markdown("### Detailed Breakdown")
-                st.markdown("""
-                Different algorithms measure similarity in different ways:
-                - **TF-IDF Cosine Similarity**: Measures semantic similarity based on term frequency and importance
-                - **Sequence Matcher**: Measures character-by-character similarity (best for detecting edits)
-                - **Jaccard Similarity**: Measures word overlap (unique words in common)
-                - **Character Similarity**: Measures character set overlap
-                """)
-                
-                # Create columns for detailed metrics
-                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-                
-                with metric_col1:
-                    st.metric(
-                        "TF-IDF Cosine",
-                        f"{cosine_sim:.2f}%",
-                        help="Semantic similarity using TF-IDF vectors"
-                    )
-                
-                with metric_col2:
-                    st.metric(
-                        "Sequence Match",
-                        f"{sequence_sim:.2f}%",
-                        help="Character-by-character sequence similarity"
-                    )
-                
-                with metric_col3:
-                    st.metric(
-                        "Jaccard (Words)",
-                        f"{jaccard_sim:.2f}%",
-                        help="Word overlap similarity"
-                    )
-                
-                with metric_col4:
-                    st.metric(
-                        "Character Overlap",
-                        f"{char_sim:.2f}%",
-                        help="Character set similarity"
-                    )
-                
-                # Visual comparison bars
-                st.markdown("### Visual Comparison")
-                st.markdown("**TF-IDF Cosine Similarity**")
-                st.progress(cosine_sim / 100)
-                
-                st.markdown("**Sequence Matcher**")
-                st.progress(sequence_sim / 100)
-                
-                st.markdown("**Jaccard Similarity (Words)**")
-                st.progress(jaccard_sim / 100)
-                
-                st.markdown("**Character Overlap**")
-                st.progress(char_sim / 100)
+            only_in_text1 = set1 - set2
+            only_in_text2 = set2 - set1
+            common_words = set1 & set2
             
-            # Show differences if requested
-            if show_diff:
+            # Display statistics
+            st.markdown("### 📊 Summary Statistics")
+            stat_col1, stat_col2, stat_col3 = st.columns(3)
+            
+            with stat_col1:
+                st.metric("✅ Common Words", len(common_words))
+            with stat_col2:
+                st.metric("➖ Only in Text 1", len(only_in_text1))
+            with stat_col3:
+                st.metric("➕ Only in Text 2", len(only_in_text2))
+            
+            # Show unique words if there are any
+            if only_in_text1 or only_in_text2:
                 st.markdown("---")
-                st.subheader("🔍 Text Differences")
+                st.markdown("### 🔤 Unique Words Analysis")
                 
-                if text1 == text2:
-                    st.success("✅ The texts are identical!")
-                else:
-                    st.info("📝 **Text differences are highlighted in the boxes above**")
-                    st.markdown("""
-                    - <span style='background-color: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Green</span> = Words added in Text 2
-                    - <span style='background-color: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; font-weight: 500; text-decoration: line-through;'>Red strikethrough</span> = Words removed from Text 1
-                    - <span style='background-color: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Orange</span> = Words modified
-                    """, unsafe_allow_html=True)
-                    
-                    # Word-level comparison for statistics
-                    words1 = text1.split()
-                    words2 = text2.split()
-                    
-                    # Get unique words in each text
-                    set1 = set(words1)
-                    set2 = set(words2)
-                    
-                    only_in_text1 = set1 - set2
-                    only_in_text2 = set2 - set1
-                    common_words = set1 & set2
-                    
-                    # Display statistics
-                    st.markdown("### 📊 Summary Statistics")
-                    stat_col1, stat_col2, stat_col3 = st.columns(3)
-                    
-                    with stat_col1:
-                        st.metric("✅ Common Words", len(common_words))
-                    with stat_col2:
-                        st.metric("➖ Only in Text 1", len(only_in_text1))
-                    with stat_col3:
-                        st.metric("➕ Only in Text 2", len(only_in_text2))
-                    
-                    # Show unique words if there are any
-                    if only_in_text1 or only_in_text2:
-                        st.markdown("---")
-                        st.markdown("### 🔤 Unique Words Analysis")
-                        
-                        unique_col1, unique_col2 = st.columns(2)
-                        
-                        with unique_col1:
-                            st.markdown("**Words only in Text 1:**")
-                            if only_in_text1:
-                                sorted_words1 = sorted(list(only_in_text1))
-                                words_display = " · ".join([f"**{word}**" for word in sorted_words1[:30]])
-                                st.markdown(words_display)
-                                if len(only_in_text1) > 30:
-                                    st.caption(f"... and {len(only_in_text1) - 30} more words")
-                            else:
-                                st.caption("None")
-                        
-                        with unique_col2:
-                            st.markdown("**Words only in Text 2:**")
-                            if only_in_text2:
-                                sorted_words2 = sorted(list(only_in_text2))
-                                words_display = " · ".join([f"**{word}**" for word in sorted_words2[:30]])
-                                st.markdown(words_display)
-                                if len(only_in_text2) > 30:
-                                    st.caption(f"... and {len(only_in_text2) - 30} more words")
-                            else:
-                                st.caption("None")
-            
-            # Interpretation
-            st.markdown("---")
-            st.subheader("💡 Interpretation")
-            
-            if average_sim >= 90:
-                st.success("🟢 **Very High Similarity**: The texts are nearly identical or very closely related.")
-            elif average_sim >= 70:
-                st.info("🔵 **High Similarity**: The texts share substantial content and meaning.")
-            elif average_sim >= 50:
-                st.warning("🟡 **Moderate Similarity**: The texts have some common elements but also notable differences.")
-            elif average_sim >= 30:
-                st.warning("🟠 **Low Similarity**: The texts have limited overlap.")
-            else:
-                st.error("🔴 **Very Low Similarity**: The texts are quite different from each other.")
+                unique_col1, unique_col2 = st.columns(2)
+                
+                with unique_col1:
+                    st.markdown("**Words only in Text 1:**")
+                    if only_in_text1:
+                        sorted_words1 = sorted(list(only_in_text1))
+                        words_display = " · ".join([f"**{word}**" for word in sorted_words1[:30]])
+                        st.markdown(words_display)
+                        if len(only_in_text1) > 30:
+                            st.caption(f"... and {len(only_in_text1) - 30} more words")
+                    else:
+                        st.caption("None")
+                
+                with unique_col2:
+                    st.markdown("**Words only in Text 2:**")
+                    if only_in_text2:
+                        sorted_words2 = sorted(list(only_in_text2))
+                        words_display = " · ".join([f"**{word}**" for word in sorted_words2[:30]])
+                        st.markdown(words_display)
+                        if len(only_in_text2) > 30:
+                            st.caption(f"... and {len(only_in_text2) - 30} more words")
+                    else:
+                        st.caption("None")
+    
+    # Interpretation
+    st.markdown("---")
+    st.subheader("💡 Interpretation")
+    
+    if average_sim >= 90:
+        st.success("🟢 **Very High Similarity**: The texts are nearly identical or very closely related.")
+    elif average_sim >= 70:
+        st.info("🔵 **High Similarity**: The texts share substantial content and meaning.")
+    elif average_sim >= 50:
+        st.warning("🟡 **Moderate Similarity**: The texts have some common elements but also notable differences.")
+    elif average_sim >= 30:
+        st.warning("🟠 **Low Similarity**: The texts have limited overlap.")
+    else:
+        st.error("🔴 **Very Low Similarity**: The texts are quite different from each other.")
 
 # Sidebar with information
 with st.sidebar:
