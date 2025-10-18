@@ -445,19 +445,23 @@ def find_matching_indices(tokens1, tokens2, algorithm="Average (All)", text1="",
 def render_highlighted_text(tokens, highlighted_indices):
     """
     Build HTML snippet with highlighted tokens based on matched indices.
+    Normalizes spacing for clean display while preserving word content.
     """
     html_parts = [
-        "<div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333;'>"
+        "<div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333; word-spacing: normal;'>"
     ]
     
     for idx, token in enumerate(tokens):
-        word_html = escape_html(token['original'])
+        # Use the original word but strip extra whitespace for clean display
+        word_display = token['original'].strip()
+        word_html = escape_html(word_display)
+        
         if idx in highlighted_indices:
             html_parts.append(
-                f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 1px; border-radius: 4px; font-weight: 500; display: inline-block;'>{word_html}</span> "
+                f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 2px; border-radius: 4px; font-weight: 500; display: inline-block; white-space: nowrap;'>{word_html}</span> "
             )
         else:
-            html_parts.append(f"<span style='color: #333;'>{word_html}</span> ")
+            html_parts.append(f"<span style='color: #333; margin: 0 2px; display: inline-block; white-space: nowrap;'>{word_html}</span> ")
     
     html_parts.append("</div>")
     return "".join(html_parts)
