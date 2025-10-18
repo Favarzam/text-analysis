@@ -29,12 +29,28 @@ def jaccard_similarity(text1, text2):
         normalized = normalize_word(word)
         if normalized:  # Only add non-empty normalized words
             normalized_words1.add(normalized)
+        
+        # Also add sub-parts if word contains separators (for compound words)
+        if '/' in word or ',' in word:
+            parts = re.split(r'[/,]+', word)
+            for part in parts:
+                part_normalized = normalize_word(part)
+                if part_normalized and len(part_normalized) >= 2:
+                    normalized_words1.add(part_normalized)
     
     normalized_words2 = set()
     for word in text2.split():
         normalized = normalize_word(word)
         if normalized:  # Only add non-empty normalized words
             normalized_words2.add(normalized)
+        
+        # Also add sub-parts if word contains separators (for compound words)
+        if '/' in word or ',' in word:
+            parts = re.split(r'[/,]+', word)
+            for part in parts:
+                part_normalized = normalize_word(part)
+                if part_normalized and len(part_normalized) >= 2:
+                    normalized_words2.add(part_normalized)
     
     # Calculate intersection and union
     intersection = normalized_words1.intersection(normalized_words2)
@@ -175,6 +191,7 @@ def tokenize_text(text):
     Split text into tokens preserving original form alongside a normalized version
     and a set of matching variants.
     Uses split() without arguments to handle any amount of whitespace.
+    Also splits compound words separated by slashes, commas, etc. for better matching.
     """
     tokens = []
     # split() without arguments handles multiple spaces, tabs, newlines, etc.
@@ -182,7 +199,10 @@ def tokenize_text(text):
         # Skip empty strings
         if not word.strip():
             continue
+        
+        # First, try to normalize the whole word
         normalized = normalize_word(word)
+        
         # Only add tokens with valid normalized words
         if normalized:
             variants = generate_variants(normalized) if len(normalized) >= 2 else set()
@@ -191,6 +211,26 @@ def tokenize_text(text):
                 'normalized': normalized,
                 'variants': variants
             })
+            
+            # ADDITIONALLY: If the word contains slashes or other separators,
+            # also tokenize the individual parts for better matching
+            # This helps with cases like "(Carbonos/Kohlenstoffe/碳原子)"
+            if '/' in word or ',' in word:
+                # Split by common separators
+                parts = re.split(r'[/,]+', word)
+                for part in parts:
+                    part_normalized = normalize_word(part)
+                    if part_normalized and len(part_normalized) >= 2:
+                        # Add these as hidden tokens (they help with matching but don't display separately)
+                        # We'll mark them as part of the original compound word
+                        part_variants = generate_variants(part_normalized) if len(part_normalized) >= 2 else set()
+                        # Use a special marker to identify these as sub-tokens
+                        tokens.append({
+                            'original': word,  # Keep the original compound word for display
+                            'normalized': part_normalized,
+                            'variants': part_variants,
+                            'is_subtoken': True  # Mark this as a sub-token
+                        })
     return tokens
 
 def find_matching_indices_jaccard(tokens1, tokens2):
@@ -446,22 +486,56 @@ def render_highlighted_text(tokens, highlighted_indices):
     """
     Build HTML snippet with highlighted tokens based on matched indices.
     Normalizes spacing for clean display while preserving word content.
+    Handles sub-tokens (compound words split by slashes) properly.
     """
     html_parts = [
         "<div style='padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; max-height: 450px; overflow-y: auto; line-height: 2.2; font-size: 14px; background-color: white; color: #333; word-spacing: normal;'>"
     ]
     
+    # Keep track of already rendered words to avoid duplicates from sub-tokens
+    rendered_originals = set()
+    
     for idx, token in enumerate(tokens):
-        # Use the original word but strip extra whitespace for clean display
-        word_display = token['original'].strip()
-        word_html = escape_html(word_display)
+        # Skip sub-tokens for display (they're only for matching)
+        # But use them to highlight the main token
+        is_subtoken = token.get('is_subtoken', False)
         
-        if idx in highlighted_indices:
-            html_parts.append(
-                f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 2px; border-radius: 4px; font-weight: 500; display: inline-block; white-space: nowrap;'>{word_html}</span> "
-            )
-        else:
-            html_parts.append(f"<span style='color: #333; margin: 0 2px; display: inline-block; white-space: nowrap;'>{word_html}</span> ")
+        # Get the original word
+        original_word = token['original'].strip()
+        
+        # Skip if this is a sub-token and we've already rendered this original word
+        if is_subtoken and original_word in rendered_originals:
+            continue
+        
+        # Check if this token or any of its sub-tokens are highlighted
+        should_highlight = idx in highlighted_indices
+        
+        # If this is not a sub-token, check if any following sub-tokens with same original are highlighted
+        if not is_subtoken:
+            # Look ahead for sub-tokens with the same original
+            for future_idx in range(idx + 1, len(tokens)):
+                future_token = tokens[future_idx]
+                if (future_token.get('is_subtoken', False) and 
+                    future_token['original'].strip() == original_word and
+                    future_idx in highlighted_indices):
+                    should_highlight = True
+                    break
+                # Stop looking if we hit a different word
+                if not future_token.get('is_subtoken', False):
+                    break
+        
+        # Only render if this is not a sub-token
+        if not is_subtoken:
+            word_html = escape_html(original_word)
+            
+            if should_highlight:
+                html_parts.append(
+                    f"<span style='background-color: #fff9c4; color: #333; padding: 3px 6px; margin: 0 2px; border-radius: 4px; font-weight: 500; display: inline-block; white-space: nowrap;'>{word_html}</span> "
+                )
+            else:
+                html_parts.append(f"<span style='color: #333; margin: 0 2px; display: inline-block; white-space: nowrap;'>{word_html}</span> ")
+            
+            rendered_originals.add(original_word)
     
     html_parts.append("</div>")
     return "".join(html_parts)
