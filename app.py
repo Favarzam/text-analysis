@@ -237,48 +237,31 @@ def find_matching_indices_tfidf(tokens1, tokens2, text1, text2):
 def find_matching_indices_sequence(tokens1, tokens2, text1, text2):
     """
     Sequence Matcher highlighting: Highlights matching sequences/blocks of text.
-    Uses difflib to find contiguous matching blocks.
+    Uses difflib to find contiguous matching blocks at the word level.
     """
     highlight1 = set()
     highlight2 = set()
     
-    # Use SequenceMatcher on the full text
-    matcher = difflib.SequenceMatcher(None, text1, text2)
+    # Create normalized word sequences for matching
+    words1 = [token['normalized'] for token in tokens1]
+    words2 = [token['normalized'] for token in tokens2]
+    
+    # Use SequenceMatcher on word sequences (much more accurate than character-level)
+    matcher = difflib.SequenceMatcher(None, words1, words2)
     matching_blocks = matcher.get_matching_blocks()
-    
-    # Convert character positions to word indices
-    # First, build character-to-word-index mappings
-    char_to_word1 = {}
-    char_to_word2 = {}
-    
-    pos1 = 0
-    for idx1, token1 in enumerate(tokens1):
-        word = token1['original']
-        for i in range(len(word)):
-            char_to_word1[pos1 + i] = idx1
-        pos1 += len(word) + 1  # +1 for space
-    
-    pos2 = 0
-    for idx2, token2 in enumerate(tokens2):
-        word = token2['original']
-        for i in range(len(word)):
-            char_to_word2[pos2 + i] = idx2
-        pos2 += len(word) + 1  # +1 for space
     
     # Highlight words that are part of matching blocks
     for block in matching_blocks:
         i, j, size = block
-        if size < 3:  # Ignore very short matches
+        if size == 0:  # Skip empty blocks
             continue
         
-        # Add all word indices in this block
-        for char_pos in range(i, i + size):
-            if char_pos in char_to_word1:
-                highlight1.add(char_to_word1[char_pos])
+        # Add all word indices in this matching block
+        for word_idx in range(i, i + size):
+            highlight1.add(word_idx)
         
-        for char_pos in range(j, j + size):
-            if char_pos in char_to_word2:
-                highlight2.add(char_to_word2[char_pos])
+        for word_idx in range(j, j + size):
+            highlight2.add(word_idx)
     
     return highlight1, highlight2
 
