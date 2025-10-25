@@ -683,16 +683,48 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("💡 Interpretation")
     
-    if jaccard_sim >= 90:
-        st.success("🟢 **Very High Similarity**: The texts share almost all the same words.")
-    elif jaccard_sim >= 70:
-        st.info("🔵 **High Similarity**: The texts share most of their words.")
+    # Thresholds based on Jaccard similarity research and practical usage:
+    # - Jaccard scores are typically lower than other similarity metrics
+    # - Even 40-50% overlap indicates substantial shared vocabulary
+    # - These thresholds align with information retrieval literature
+    if jaccard_sim >= 70:
+        st.success("🟢 **Very High Similarity / Largely Redundant**: The texts share most of the same words and are highly similar.")
     elif jaccard_sim >= 50:
-        st.warning("🟡 **Moderate Similarity**: The texts have some words in common but also notable differences.")
-    elif jaccard_sim >= 30:
-        st.warning("🟠 **Low Similarity**: The texts have limited word overlap.")
+        st.info("🔵 **High Similarity / Substantial Overlap**: The texts share a substantial portion of their vocabulary.")
+    elif jaccard_sim >= 25:
+        st.warning("🟡 **Moderate Similarity / Meaningful Overlap**: The texts have meaningful word overlap but also notable differences.")
     else:
-        st.error("🔴 **Very Low Similarity**: The texts share very few words in common.")
+        st.error("🔴 **Low Similarity / Minimal Overlap**: The texts share limited vocabulary and are largely distinct.")
+    
+    # Add explanation of thresholds
+    with st.expander("📖 Understanding the Similarity Thresholds"):
+        st.markdown("""
+        **Why these thresholds?**
+        
+        The Jaccard similarity coefficient measures word overlap, and scores are typically lower than other metrics because:
+        - It treats all words equally (no weighting)
+        - It's sensitive to vocabulary differences
+        - Even related texts may use different word choices
+        
+        **Threshold Rationale:**
+        - **≥ 70%**: Very High / Largely Redundant
+          - Texts share most vocabulary
+          - Likely duplicates or near-duplicates
+          
+        - **50-69%**: High / Substantial Overlap
+          - Strong vocabulary overlap
+          - May be related versions or paraphrases
+          
+        - **25-49%**: Moderate / Meaningful Overlap  
+          - Noticeable shared vocabulary
+          - Texts discuss related topics or share some content
+          
+        - **< 25%**: Low / Minimal Overlap
+          - Limited shared vocabulary
+          - Texts are largely distinct
+        
+        *These thresholds are based on standard practices in text similarity research and information retrieval.*
+        """)
 
 # Sidebar with information
 with st.sidebar:
@@ -756,11 +788,12 @@ with st.sidebar:
     ### 📊 Understanding Results
     
     **Similarity Score:**
-    - **90-100%** = Nearly identical
-    - **70-89%** = Very similar
-    - **50-69%** = Moderately similar
-    - **30-49%** = Somewhat similar
-    - **0-29%** = Very different
+    - **≥ 70%** = Very High / Largely Redundant
+    - **50-69%** = High / Substantial Overlap
+    - **25-49%** = Moderate / Meaningful Overlap
+    - **< 25%** = Low / Minimal Overlap
+    
+    *Note: Jaccard similarity scores are typically lower than other metrics. These research-based thresholds reflect how word overlap correlates with actual text similarity.*
     
     **Highlighting:**
     - 🟨 Yellow = Words in both texts
