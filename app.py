@@ -750,7 +750,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{jaccard_sim:.1f}%",
             help="Exact word matching - ignores punctuation and case. Good for duplicate detection."
         )
-        st.progress(jaccard_sim / 100)
+        st.progress(float(jaccard_sim) / 100.0)
     
     with col2:
         st.metric(
@@ -758,7 +758,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{cosine_sim:.1f}%",
             help="Statistical similarity - weights important words. Good for document comparison."
         )
-        st.progress(cosine_sim / 100)
+        st.progress(float(cosine_sim) / 100.0)
     
     with col3:
         st.metric(
@@ -766,7 +766,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{sbert_sim:.1f}%",
             help="AI-powered semantic understanding - captures meaning and context. Best for paraphrases."
         )
-        st.progress(sbert_sim / 100)
+        st.progress(float(sbert_sim) / 100.0)
     
     # Second row of metrics
     col4, col5, col6 = st.columns(3)
@@ -777,7 +777,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{sequence_sim:.1f}%",
             help="Order-aware matching - finds contiguous matching blocks. Good for revisions."
         )
-        st.progress(sequence_sim / 100)
+        st.progress(float(sequence_sim) / 100.0)
     
     with col5:
         st.metric(
@@ -785,7 +785,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{char_sim:.1f}%",
             help="Character-level similarity - good for typos and minor variations."
         )
-        st.progress(char_sim / 100)
+        st.progress(float(char_sim) / 100.0)
     
     with col6:
         st.metric(
@@ -793,7 +793,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             value=f"{average_sim:.1f}%",
             help="Average of all similarity metrics for a balanced view."
         )
-        st.progress(average_sim / 100)
+        st.progress(float(average_sim) / 100.0)
     
     # Show differences if requested
     show_diff = st.session_state.show_diff
