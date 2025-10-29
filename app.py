@@ -703,7 +703,7 @@ if analyze_clicked:
         with st.spinner('Calculating similarities...'):
             # Jaccard similarity (word overlap, ignores punctuation)
             jaccard_sim = jaccard_similarity(text1, text2)
-            
+        
             # TF-IDF Cosine similarity (statistical, weighted by importance)
             cosine_sim = cosine_similarity_tfidf(text1, text2)
             
@@ -1192,24 +1192,8 @@ with st.sidebar:
     15-30% better performance on semantic tasks 
     compared to statistical methods.
     
-    ---
-    
-    ### 💻 Technical Details
-    
-    **Powered by:**
-    - Sentence-BERT (all-mpnet-base-v2)
-    - scikit-learn TF-IDF
-    - Python difflib
-    - Streamlit UI
-    
-    **Research sources:**
-    - EMNLP 2019 (Reimers & Gurevych)
-    - PLOS ONE (Bettembourg et al., 2015)
-    - MTEB Benchmark (2023)
-    - ACL Anthology studies
-    
-    ---
-    
     """)
     
+    st.markdown("---")
+    st.markdown("**Created by Farnaz Avarzamani**")
     st.markdown("Built with [Streamlit](https://streamlit.io) 🎈 | Powered by 🧠 AI")
