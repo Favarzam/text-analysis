@@ -17,7 +17,7 @@ st.set_page_config(
 # Title and description
 st.title("📝 Advanced Text Similarity Analyzer")
 st.markdown("""
-Compare two texts using **6 different algorithms** including AI-powered semantic analysis.
+Compare two texts using **5 different algorithms** including AI-powered semantic analysis.
 From exact word matching to deep meaning understanding - get comprehensive similarity insights.
 Works with all languages. Perfect for plagiarism detection, content analysis, document comparison, and paraphrase detection.
 """)
@@ -140,22 +140,6 @@ def sequence_similarity(text1, text2):
     matcher = difflib.SequenceMatcher(None, text1, text2)
     return matcher.ratio() * 100
 
-# Function to calculate character-level similarity
-def character_similarity(text1, text2):
-    """Calculate character-level Jaccard similarity"""
-    # Preprocess texts first
-    text1 = preprocess_text(text1)
-    text2 = preprocess_text(text2)
-    
-    chars1 = set(text1.lower())
-    chars2 = set(text2.lower())
-    
-    intersection = chars1.intersection(chars2)
-    union = chars1.union(chars2)
-    
-    if len(union) == 0:
-        return 0.0
-    return (len(intersection) / len(union)) * 100
 
 # Load Sentence-BERT model (cached to avoid reloading)
 @st.cache_resource
@@ -527,45 +511,6 @@ def find_matching_indices_comprehensive(tokens1, tokens2):
     
     return highlight1, highlight2
 
-def find_matching_indices_character(tokens1, tokens2):
-    """
-    Character-based highlighting: Highlights words that share significant character overlap.
-    """
-    highlight1 = set()
-    highlight2 = set()
-    
-    # For each token, find tokens in the other text with high character overlap
-    for idx1, token1 in enumerate(tokens1):
-        norm1 = token1['normalized']
-        if not norm1 or len(norm1) < 2:
-            continue
-        
-        chars1 = set(norm1)
-        best_overlap = 0
-        best_idx2 = None
-        
-        for idx2, token2 in enumerate(tokens2):
-            norm2 = token2['normalized']
-            if not norm2 or len(norm2) < 2:
-                continue
-            
-            chars2 = set(norm2)
-            intersection = len(chars1 & chars2)
-            union = len(chars1 | chars2)
-            
-            if union > 0:
-                overlap = intersection / union
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_idx2 = idx2
-        
-        # Threshold: at least 60% character overlap
-        if best_overlap >= 0.6 and best_idx2 is not None:
-            highlight1.add(idx1)
-            highlight2.add(best_idx2)
-    
-    return highlight1, highlight2
-
 def find_matching_indices_sbert(tokens1, tokens2, text1, text2):
     """
     SBERT-based highlighting: Highlights semantically similar words/phrases using embeddings.
@@ -637,8 +582,6 @@ def find_matching_indices(tokens1, tokens2, algorithm="Average (All)", text1="",
         return find_matching_indices_sbert(tokens1, tokens2, text1, text2)
     elif algorithm == "Sequence Matcher":
         return find_matching_indices_sequence(tokens1, tokens2, text1, text2)
-    elif algorithm == "Character Overlap":
-        return find_matching_indices_character(tokens1, tokens2)
     else:  # "Average (All)" or default
         return find_matching_indices_comprehensive(tokens1, tokens2)
 
@@ -707,26 +650,26 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Text 1")
     text1 = st.text_area(
-        "Enter first text",
-        height=300,
-        placeholder="Paste or type your first text here...",
-        label_visibility="collapsed",
-        key="text1_input",
-        value=st.session_state.text1
-    )
+            "Enter first text",
+            height=300,
+            placeholder="Paste or type your first text here...",
+            label_visibility="collapsed",
+            key="text1_input",
+            value=st.session_state.text1
+        )
     st.session_state.text1 = text1
     st.caption(f"Characters: {len(st.session_state.text1)} | Words: {len(st.session_state.text1.split())}")
 
 with col2:
     st.subheader("Text 2")
     text2 = st.text_area(
-        "Enter second text",
-        height=300,
-        placeholder="Paste or type your second text here...",
-        label_visibility="collapsed",
-        key="text2_input",
-        value=st.session_state.text2
-    )
+            "Enter second text",
+            height=300,
+            placeholder="Paste or type your second text here...",
+            label_visibility="collapsed",
+            key="text2_input",
+            value=st.session_state.text2
+        )
     st.session_state.text2 = text2
     st.caption(f"Characters: {len(st.session_state.text2)} | Words: {len(st.session_state.text2.split())}")
 
@@ -770,11 +713,8 @@ if analyze_clicked:
             # Sequence matcher (order-aware)
             sequence_sim = sequence_similarity(text1, text2)
             
-            # Character-level similarity
-            char_sim = character_similarity(text1, text2)
-            
             # Average of all metrics
-            average_sim = (jaccard_sim + cosine_sim + sbert_sim + sequence_sim + char_sim) / 5
+            average_sim = (jaccard_sim + cosine_sim + sbert_sim + sequence_sim) / 4
         
         # Store results in session state
         st.session_state.analysis_results = {
@@ -782,7 +722,6 @@ if analyze_clicked:
             'cosine_sim': cosine_sim,
             'sbert_sim': sbert_sim,
             'sequence_sim': sequence_sim,
-            'char_sim': char_sim,
             'average_sim': average_sim
         }
         st.session_state.show_diff = show_diff
@@ -796,7 +735,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     cosine_sim = results['cosine_sim']
     sbert_sim = results['sbert_sim']
     sequence_sim = results['sequence_sim']
-    char_sim = results['char_sim']
     average_sim = results['average_sim']
     text1 = st.session_state.text1
     text2 = st.session_state.text2
@@ -820,7 +758,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         """)
     
     # Create columns for different metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         st.metric(
@@ -838,6 +776,9 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         )
         st.progress(float(cosine_sim) / 100.0)
     
+    # Second row of metrics
+    col3, col4 = st.columns(2)
+    
     with col3:
         st.metric(
             label="🧠 Sentence-BERT (Semantic)",
@@ -845,9 +786,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
             help="AI-powered semantic understanding - captures meaning and context. Best for paraphrases."
         )
         st.progress(float(sbert_sim) / 100.0)
-    
-    # Second row of metrics
-    col4, col5, col6 = st.columns(3)
     
     with col4:
         st.metric(
@@ -857,19 +795,14 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         )
         st.progress(float(sequence_sim) / 100.0)
     
-    with col5:
-        st.metric(
-            label="🔡 Character Overlap",
-            value=f"{char_sim:.1f}%",
-            help="Character-level similarity - good for typos and minor variations."
-        )
-        st.progress(float(char_sim) / 100.0)
-    
+    # Third row - Average
+    st.markdown("---")
+    col5, col6, col7 = st.columns([1, 2, 1])
     with col6:
         st.metric(
             label="⭐ Average (All Methods)",
             value=f"{average_sim:.1f}%",
-            help="Average of all similarity metrics for a balanced view."
+            help="Average of all 4 similarity metrics for a balanced view."
         )
         st.progress(float(average_sim) / 100.0)
     
@@ -946,7 +879,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                 # Original highlighting with algorithm selection
                 highlight_algo = st.selectbox(
                     "Select highlighting algorithm:",
-                    ["Jaccard (Words)", "TF-IDF Cosine", "Sentence-BERT (Semantic)", "Sequence Matcher", "Character Overlap"],
+                    ["Jaccard (Words)", "TF-IDF Cosine", "Sentence-BERT (Semantic)", "Sequence Matcher"],
                     help="Choose how to identify similar content"
                 )
                 
@@ -1061,7 +994,7 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                                 <div><strong>Text 1:</strong> {sent1}</div>
                                 <div style='margin-top: 8px;'><strong>Text 2:</strong> {sentences2[best_match_idx]}</div>
                             </div>
-                            """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
                         
                     except Exception as e:
                         st.error(f"Sentence comparison failed. Try 'Word Highlighting' mode instead.")
@@ -1136,11 +1069,6 @@ if st.session_state.analyzed and st.session_state.analysis_results:
         - **Strengths**: Good for finding edited sections, tracks changes
         - **Best for**: Comparing document versions, tracking edits, revision analysis
         
-        **5. 🔡 Character Overlap - BEST FOR TYPOS**
-        - **What it does**: Compares character-level similarity
-        - **Strengths**: Tolerant to spelling variations and typos
-        - **Best for**: Fuzzy matching, handling misspellings, name matching
-        
         ---
         
         **Research-Based Threshold Ranges:**
@@ -1168,14 +1096,14 @@ with st.sidebar:
     1. **Paste** your texts into the two boxes
     2. **Check** "Show text differences" to visualize (optional)
     3. **Click** "Analyze Similarity"
-    4. **View** 6 different similarity metrics
+    4. **View** 5 different similarity metrics
     5. **Select** highlighting algorithm to visualize matches
     
     ---
     
     ### 🧠 Algorithms Available
     
-    **1. Sentence-BERT (Semantic) ⭐ NEW**
+    **1. Sentence-BERT (Semantic) ⭐**
     - AI-powered meaning understanding
     - Detects paraphrases & synonyms
     - Best for: Content analysis, semantic similarity
@@ -1196,14 +1124,9 @@ with st.sidebar:
     - Best for: Tracking revisions, edits
     - Finds contiguous blocks
     
-    **5. Character Overlap**
-    - Character-level similarity
-    - Best for: Typos, fuzzy matching
-    - Tolerant to spelling errors
-    
-    **6. Average (All Methods)**
+    **5. Average (All Methods)**
     - Balanced comprehensive view
-    - Combines all algorithms
+    - Combines all 4 algorithms
     
     ---
     
