@@ -21,6 +21,7 @@ Compare two texts using **5 different algorithms** including AI-powered semantic
 From exact word matching to deep meaning understanding - get comprehensive similarity insights.
 Works with all languages. Perfect for plagiarism detection, content analysis, document comparison, and paraphrase detection.
 """)
+st.markdown("*Created by Farnaz Avarzamani*")
 
 # Comprehensive text preprocessing function
 def preprocess_text(text, lowercase=True):
@@ -1132,16 +1133,7 @@ with st.sidebar:
     
     ### 🌍 Language Support
     
-    Works with **all languages**:
-    - ✅ Latin scripts (English, Spanish, French...)
-    - ✅ Arabic (العربية)
-    - ✅ Chinese (中文)
-    - ✅ Japanese (日本語)
-    - ✅ Korean (한국어)
-    - ✅ Cyrillic (Русский)
-    - ✅ Greek (Ελληνικά)
-    - ✅ Hebrew (עברית)
-    - ✅ And more!
+    Works with different languages.
     
     ---
     
@@ -1194,6 +1186,4 @@ with st.sidebar:
     
     """)
     
-    st.markdown("---")
-    st.markdown("**Created by Farnaz Avarzamani**")
     st.markdown("Built with [Streamlit](https://streamlit.io) 🎈 | Powered by 🧠 AI")
