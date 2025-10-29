@@ -17,6 +17,7 @@ A powerful Streamlit web application that analyzes and compares two texts using 
 - 📈 **Comprehensive Results**: 6 metrics displayed simultaneously with visual progress bars
 - 🔍 **Interactive Highlighting**: Choose any algorithm to visualize similar content
 - 💡 **Smart Interpretation**: Research-based thresholds with automatic paraphrase detection
+- 🧹 **Smart Preprocessing**: Automatically normalizes quotes, dashes, and formatting differences
 - 🌍 **Multi-Language Support**: Works with all languages (English, Arabic, Chinese, Japanese, etc.)
 - 📖 **Educational**: Built-in explanations based on peer-reviewed research (2015-2025)
 
@@ -39,6 +40,19 @@ streamlit run app.py
 The app will open in your default web browser at `http://localhost:8501`
 
 ## How It Works
+
+### Intelligent Text Preprocessing
+
+Before any similarity calculation, the tool automatically normalizes text to ensure fair comparisons:
+
+- **Case Normalization**: Converts to lowercase (Hello → hello, WORLD → world)
+- **Smart Quotes Normalization**: " " → " and ' ' → ' (curly to straight quotes)
+- **Dash Normalization**: — – → - (em dash, en dash to hyphen)  
+- **Whitespace Normalization**: Multiple spaces → Single space
+- **Invisible Character Removal**: Zero-width spaces, BOM marks, and other hidden characters
+- **Ellipsis Normalization**: … → ...
+
+**Why this matters**: Texts copied from different sources (Word, Google Docs, PDFs) often have different quote styles, formatting, and capitalization. Without preprocessing, "Hello" and "hello" or "test" and "test" would be treated as different words, creating false differences.
 
 ### Algorithms Explained
 

@@ -22,9 +22,54 @@ From exact word matching to deep meaning understanding - get comprehensive simil
 Works with all languages. Perfect for plagiarism detection, content analysis, document comparison, and paraphrase detection.
 """)
 
+# Comprehensive text preprocessing function
+def preprocess_text(text, lowercase=True):
+    """
+    Preprocess text for similarity analysis by normalizing punctuation and formatting.
+    This ensures that different quote styles, dashes, and other punctuation don't 
+    create false differences.
+    
+    Args:
+        text: Input text to preprocess
+        lowercase: Whether to convert to lowercase (default: True)
+    """
+    if not text:
+        return ""
+    
+    # Normalize different types of quotes to standard ones
+    # Curly quotes to straight quotes
+    text = text.replace('"', '"').replace('"', '"')  # Smart double quotes
+    text = text.replace(''', "'").replace(''', "'")  # Smart single quotes
+    text = text.replace('`', "'")  # Backticks to single quotes
+    
+    # Normalize different types of dashes
+    text = text.replace('—', '-').replace('–', '-')  # Em dash and en dash to hyphen
+    text = text.replace('−', '-')  # Minus sign to hyphen
+    
+    # Normalize ellipsis
+    text = text.replace('…', '...')
+    
+    # Normalize whitespace (multiple spaces to single space)
+    text = ' '.join(text.split())
+    
+    # Remove zero-width characters and other invisible characters
+    text = text.replace('\u200b', '').replace('\ufeff', '').replace('\u00a0', ' ')
+    
+    # Convert to lowercase for case-insensitive comparison
+    # Note: For SBERT semantic analysis, case can sometimes provide context,
+    # but for consistency across algorithms, we lowercase by default
+    if lowercase:
+        text = text.lower()
+    
+    return text
+
 # Function to calculate Jaccard similarity
 def jaccard_similarity(text1, text2):
     """Calculate Jaccard similarity between two texts using normalized words"""
+    # Preprocess texts first
+    text1 = preprocess_text(text1)
+    text2 = preprocess_text(text2)
+    
     # Normalize words using the same function as highlighting
     # This ensures consistency between the score and highlighting
     normalized_words1 = set()
@@ -67,6 +112,10 @@ def jaccard_similarity(text1, text2):
 # Function to calculate Cosine similarity using TF-IDF
 def cosine_similarity_tfidf(text1, text2):
     """Calculate cosine similarity between two texts using TF-IDF"""
+    # Preprocess texts first
+    text1 = preprocess_text(text1)
+    text2 = preprocess_text(text2)
+    
     if not text1.strip() or not text2.strip():
         return 0.0
     
@@ -84,12 +133,20 @@ def cosine_similarity_tfidf(text1, text2):
 # Function to calculate Sequence Matcher similarity
 def sequence_similarity(text1, text2):
     """Calculate similarity using Python's difflib SequenceMatcher"""
+    # Preprocess texts first
+    text1 = preprocess_text(text1)
+    text2 = preprocess_text(text2)
+    
     matcher = difflib.SequenceMatcher(None, text1, text2)
     return matcher.ratio() * 100
 
 # Function to calculate character-level similarity
 def character_similarity(text1, text2):
     """Calculate character-level Jaccard similarity"""
+    # Preprocess texts first
+    text1 = preprocess_text(text1)
+    text2 = preprocess_text(text2)
+    
     chars1 = set(text1.lower())
     chars2 = set(text2.lower())
     
@@ -110,6 +167,10 @@ def load_sbert_model():
 # Function to calculate Sentence-BERT similarity
 def sbert_similarity(text1, text2):
     """Calculate semantic similarity using Sentence-BERT embeddings"""
+    # Preprocess texts first
+    text1 = preprocess_text(text1)
+    text2 = preprocess_text(text2)
+    
     if not text1.strip() or not text2.strip():
         return 0.0
     
@@ -228,6 +289,9 @@ def tokenize_text(text):
     Uses split() without arguments to handle any amount of whitespace.
     Also splits compound words separated by slashes, commas, etc. for better matching.
     """
+    # Preprocess text first to normalize quotes, dashes, etc.
+    text = preprocess_text(text)
+    
     tokens = []
     # split() without arguments handles multiple spaces, tabs, newlines, etc.
     for word in text.split():
@@ -741,6 +805,20 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     st.markdown("---")
     st.subheader("📊 Similarity Results")
     
+    # Show preprocessing info
+    with st.expander("ℹ️ Text Preprocessing Applied", expanded=False):
+        st.markdown("""
+        **All algorithms automatically normalize:**
+        - ✅ **Case**: Converted to lowercase (Hello = hello)
+        - ✅ **Smart quotes**: " " → ", ' ' → ' (curly to straight)
+        - ✅ **Dashes**: — – → - (em/en dash to hyphen)
+        - ✅ **Whitespace**: Multiple spaces → Single space
+        - ✅ **Invisible characters**: Zero-width spaces removed
+        
+        This ensures fair comparisons regardless of formatting differences.
+        Original text is preserved for display.
+        """)
+    
     # Create columns for different metrics
     col1, col2, col3 = st.columns(3)
     
@@ -816,8 +894,12 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                 # Summary statistics
                 st.markdown("### Quick Summary")
                 
-                words1 = set(text1.lower().split())
-                words2 = set(text2.lower().split())
+                # Preprocess for comparison
+                processed_text1 = preprocess_text(text1)
+                processed_text2 = preprocess_text(text2)
+                
+                words1 = set(processed_text1.lower().split())
+                words2 = set(processed_text2.lower().split())
                 common_words = words1 & words2
                 unique1 = words1 - words2
                 unique2 = words2 - words1
@@ -885,9 +967,13 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                 
                 st.markdown("**Legend:** <span style='background-color: #ffebe9; color: #d73a49; padding: 2px 4px;'>− Removed from Text 1</span> | <span style='background-color: #e6ffed; color: #22863a; padding: 2px 4px;'>+ Added in Text 2</span>", unsafe_allow_html=True)
                 
+                # Preprocess for comparison
+                processed_text1 = preprocess_text(text1)
+                processed_text2 = preprocess_text(text2)
+                
                 # Use difflib for line-by-line or word-by-word diff
-                words1 = text1.split()
-                words2 = text2.split()
+                words1 = processed_text1.split()
+                words2 = processed_text2.split()
                 
                 diff = difflib.unified_diff(words1, words2, lineterm='', n=0)
                 diff_lines = list(diff)
@@ -912,10 +998,14 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                 # Sentence-level comparison (better for semantic)
                 st.markdown("**Sentence-by-sentence similarity** (using Sentence-BERT for semantic understanding)")
                 
+                # Preprocess for comparison
+                processed_text1 = preprocess_text(text1)
+                processed_text2 = preprocess_text(text2)
+                
                 # Split into sentences
                 import re
-                sentences1 = [s.strip() for s in re.split(r'[.!?]+', text1) if s.strip()]
-                sentences2 = [s.strip() for s in re.split(r'[.!?]+', text2) if s.strip()]
+                sentences1 = [s.strip() for s in re.split(r'[.!?]+', processed_text1) if s.strip()]
+                sentences2 = [s.strip() for s in re.split(r'[.!?]+', processed_text2) if s.strip()]
                 
                 if not sentences1 or not sentences2:
                     st.warning("Unable to split texts into sentences. Try 'Word Highlighting' mode instead.")
