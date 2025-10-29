@@ -799,40 +799,172 @@ if st.session_state.analyzed and st.session_state.analysis_results:
     show_diff = st.session_state.show_diff
     if show_diff:
         st.markdown("---")
-        st.subheader("🔍 Text Differences (Visual Highlighting)")
+        st.subheader("🔍 Text Differences (Visual Comparison)")
         
         if text1 == text2:
             st.success("✅ The texts are identical!")
         else:
-            # Allow user to select highlighting algorithm
-            highlight_algo = st.selectbox(
-                "Select highlighting algorithm:",
-                ["Jaccard (Words)", "TF-IDF Cosine", "Sentence-BERT (Semantic)", "Sequence Matcher", "Character Overlap", "Average (All)"],
-                help="Choose how to identify and highlight similar content"
+            # Visualization mode selector
+            viz_mode = st.radio(
+                "Select visualization mode:",
+                ["📊 Similarity Summary", "🎨 Word Highlighting", "📝 Diff View (GitHub Style)", "📏 Sentence Comparison"],
+                horizontal=True,
+                help="Choose how to visualize the differences"
             )
             
-            st.info("📝 **Similar words/content are highlighted in yellow below**")
-            st.markdown(f"""
-            - <span style='background-color: #fff9c4; color: #333; padding: 2px 6px; border-radius: 3px; font-weight: 500;'>Yellow highlight</span> = Similar content (using {highlight_algo})
-            - <span style='color: #333;'>No highlight</span> = Unique content
+            if viz_mode == "📊 Similarity Summary":
+                # Summary statistics
+                st.markdown("### Quick Summary")
+                
+                words1 = set(text1.lower().split())
+                words2 = set(text2.lower().split())
+                common_words = words1 & words2
+                unique1 = words1 - words2
+                unique2 = words2 - words1
+                
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    st.metric("Common Words", len(common_words))
+                with col_s2:
+                    st.metric("Unique to Text 1", len(unique1))
+                with col_s3:
+                    st.metric("Unique to Text 2", len(unique2))
+                
+                # Show sample common words
+                if common_words:
+                    st.markdown("**📌 Sample Common Words:**")
+                    sample_common = sorted(list(common_words))[:20]
+                    st.code(", ".join(sample_common), language=None)
+                
+                # Show unique words
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    if unique1:
+                        st.markdown("**🔵 Unique to Text 1:**")
+                        sample_unique1 = sorted(list(unique1))[:15]
+                        st.code(", ".join(sample_unique1), language=None)
+                with col_u2:
+                    if unique2:
+                        st.markdown("**🟢 Unique to Text 2:**")
+                        sample_unique2 = sorted(list(unique2))[:15]
+                        st.code(", ".join(sample_unique2), language=None)
             
-            **Note:** Different algorithms highlight different types of similarity - try them all!
-            """, unsafe_allow_html=True)
+            elif viz_mode == "🎨 Word Highlighting":
+                # Original highlighting with algorithm selection
+                highlight_algo = st.selectbox(
+                    "Select highlighting algorithm:",
+                    ["Jaccard (Words)", "TF-IDF Cosine", "Sentence-BERT (Semantic)", "Sequence Matcher", "Character Overlap"],
+                    help="Choose how to identify similar content"
+                )
+                
+                st.info(f"💡 **Using {highlight_algo}** - Words/content with matches are highlighted in yellow")
+                
+                # Render highlighted text
+                tokens_text1 = tokenize_text(text1)
+                tokens_text2 = tokenize_text(text2)
+                highlighted1, highlighted2 = find_matching_indices(tokens_text1, tokens_text2, highlight_algo, text1, text2)
+                highlight_html1 = render_highlighted_text(tokens_text1, highlighted1)
+                highlight_html2 = render_highlighted_text(tokens_text2, highlighted2)
+                
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    st.markdown("**Text 1**")
+                    st.markdown(highlight_html1, unsafe_allow_html=True)
+                with col_h2:
+                    st.markdown("**Text 2**")
+                    st.markdown(highlight_html2, unsafe_allow_html=True)
+                
+                # Show match statistics
+                match_pct1 = (len(highlighted1) / len(tokens_text1) * 100) if tokens_text1 else 0
+                match_pct2 = (len(highlighted2) / len(tokens_text2) * 100) if tokens_text2 else 0
+                st.caption(f"📊 Match rate: Text 1 = {match_pct1:.1f}% highlighted | Text 2 = {match_pct2:.1f}% highlighted")
             
-            # Render highlighted text with selected algorithm
-            tokens_text1 = tokenize_text(text1)
-            tokens_text2 = tokenize_text(text2)
-            highlighted1, highlighted2 = find_matching_indices(tokens_text1, tokens_text2, highlight_algo, text1, text2)
-            highlight_html1 = render_highlighted_text(tokens_text1, highlighted1)
-            highlight_html2 = render_highlighted_text(tokens_text2, highlighted2)
+            elif viz_mode == "📝 Diff View (GitHub Style)":
+                # Traditional diff view
+                import difflib
+                
+                st.markdown("**Legend:** <span style='background-color: #ffebe9; color: #d73a49; padding: 2px 4px;'>− Removed from Text 1</span> | <span style='background-color: #e6ffed; color: #22863a; padding: 2px 4px;'>+ Added in Text 2</span>", unsafe_allow_html=True)
+                
+                # Use difflib for line-by-line or word-by-word diff
+                words1 = text1.split()
+                words2 = text2.split()
+                
+                diff = difflib.unified_diff(words1, words2, lineterm='', n=0)
+                diff_lines = list(diff)
+                
+                if len(diff_lines) > 3:  # Skip header lines
+                    diff_html = "<div style='font-family: monospace; padding: 15px; background-color: #f6f8fa; border-radius: 6px; max-height: 500px; overflow-y: auto;'>"
+                    
+                    for line in diff_lines[3:]:  # Skip first 3 header lines
+                        if line.startswith('-'):
+                            diff_html += f"<div style='background-color: #ffebe9; color: #d73a49; padding: 2px 5px; margin: 1px 0;'>− {line[1:]}</div>"
+                        elif line.startswith('+'):
+                            diff_html += f"<div style='background-color: #e6ffed; color: #22863a; padding: 2px 5px; margin: 1px 0;'>+ {line[1:]}</div>"
+                        else:
+                            diff_html += f"<div style='padding: 2px 5px; margin: 1px 0; color: #666;'>&nbsp; {line}</div>"
+                    
+                    diff_html += "</div>"
+                    st.markdown(diff_html, unsafe_allow_html=True)
+                else:
+                    st.info("Texts are very similar - minimal differences detected")
             
-            col_h1, col_h2 = st.columns(2)
-            with col_h1:
-                st.markdown("**Text 1 (Highlighted)**")
-                st.markdown(highlight_html1, unsafe_allow_html=True)
-            with col_h2:
-                st.markdown("**Text 2 (Highlighted)**")
-                st.markdown(highlight_html2, unsafe_allow_html=True)
+            elif viz_mode == "📏 Sentence Comparison":
+                # Sentence-level comparison (better for semantic)
+                st.markdown("**Sentence-by-sentence similarity** (using Sentence-BERT for semantic understanding)")
+                
+                # Split into sentences
+                import re
+                sentences1 = [s.strip() for s in re.split(r'[.!?]+', text1) if s.strip()]
+                sentences2 = [s.strip() for s in re.split(r'[.!?]+', text2) if s.strip()]
+                
+                if not sentences1 or not sentences2:
+                    st.warning("Unable to split texts into sentences. Try 'Word Highlighting' mode instead.")
+                else:
+                    try:
+                        model = load_sbert_model()
+                        
+                        # Generate embeddings for all sentences
+                        embeddings1 = model.encode(sentences1, convert_to_numpy=True)
+                        embeddings2 = model.encode(sentences2, convert_to_numpy=True)
+                        
+                        # Calculate similarity matrix
+                        similarity_matrix = np.dot(embeddings1, embeddings2.T) / (
+                            np.linalg.norm(embeddings1, axis=1)[:, np.newaxis] * 
+                            np.linalg.norm(embeddings2, axis=1)[np.newaxis, :]
+                        )
+                        
+                        # Display sentence pairs
+                        st.markdown("#### Text 1 Sentences → Best Match in Text 2")
+                        
+                        for i, sent1 in enumerate(sentences1):
+                            best_match_idx = np.argmax(similarity_matrix[i])
+                            best_score = similarity_matrix[i][best_match_idx]
+                            
+                            # Color code by similarity
+                            if best_score >= 0.8:
+                                color = "#d4edda"  # Green
+                                badge = "🟢 Very Similar"
+                            elif best_score >= 0.6:
+                                color = "#fff3cd"  # Yellow
+                                badge = "🟡 Similar"
+                            elif best_score >= 0.4:
+                                color = "#f8d7da"  # Light red
+                                badge = "🟠 Somewhat Similar"
+                            else:
+                                color = "#f5f5f5"  # Gray
+                                badge = "⚪ Different"
+                            
+                            st.markdown(f"""
+                            <div style='background-color: {color}; padding: 12px; margin: 8px 0; border-radius: 6px; border-left: 4px solid #666;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>{badge} (Score: {best_score:.2%})</div>
+                                <div><strong>Text 1:</strong> {sent1}</div>
+                                <div style='margin-top: 8px;'><strong>Text 2:</strong> {sentences2[best_match_idx]}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.error(f"Sentence comparison failed. Try 'Word Highlighting' mode instead.")
+                        st.caption(f"Error: {str(e)}")
     
     # Interpretation
     st.markdown("---")
