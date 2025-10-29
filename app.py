@@ -898,8 +898,19 @@ if st.session_state.analyzed and st.session_state.analysis_results:
                 processed_text1 = preprocess_text(text1)
                 processed_text2 = preprocess_text(text2)
                 
-                words1 = set(processed_text1.lower().split())
-                words2 = set(processed_text2.lower().split())
+                # Extract normalized words (removes punctuation)
+                words1 = set()
+                for word in processed_text1.split():
+                    normalized = normalize_word(word)
+                    if normalized and len(normalized) >= 2:  # Skip very short words
+                        words1.add(normalized)
+                
+                words2 = set()
+                for word in processed_text2.split():
+                    normalized = normalize_word(word)
+                    if normalized and len(normalized) >= 2:  # Skip very short words
+                        words2.add(normalized)
+                
                 common_words = words1 & words2
                 unique1 = words1 - words2
                 unique2 = words2 - words1
